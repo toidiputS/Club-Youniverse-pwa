@@ -29,8 +29,8 @@ export const TheBox: React.FC<TheBoxProps> = ({ candidates, onVote, isVotingActi
         <div className="flex gap-4 justify-center pb-4">
             {candidates.map(song => (
                 <div key={song.id} className="w-32 flex-shrink-0 group">
-                    <SectionCard className="h-full animate-fade-in transition-all duration-300 hover:scale-105 hover:z-10 hover:shadow-[0_0_20px_var(--accent-primary)] group-hover:border-[var(--accent-primary)]">
-                        <div className="flex flex-col p-2 gap-1 h-full">
+                    <SectionCard className="animate-fade-in transition-all duration-300 hover:scale-105 hover:z-10 hover:shadow-[0_0_20px_var(--accent-primary)] group-hover:border-[var(--accent-primary)]">
+                        <div className="flex flex-col p-2 gap-1">
                             {/* Cover Art */}
                             <div className="relative aspect-square w-full overflow-hidden rounded mb-1">
                                 <img src={song.coverArtUrl} alt={song.title} className="w-full h-full object-cover" />

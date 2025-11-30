@@ -34,27 +34,43 @@ type DbSong = {
  * @param dbSong - The song object from the Supabase database.
  * @returns A song object in the format expected by the application.
  */
-const mapDbSongToAppSong = (dbSong: DbSong): Song => ({
-    id: dbSong.id,
-    uploaderId: dbSong.uploader_id,
-    title: dbSong.title,
-    artistName: dbSong.artist_name,
-    source: dbSong.source,
-    audioUrl: dbSong.audio_url,
-    coverArtUrl: dbSong.cover_art_url,
-    durationSec: dbSong.duration_sec,
-    stars: dbSong.stars,
-    boxRoundsSeen: dbSong.box_rounds_seen,
-    boxRoundsLost: dbSong.box_rounds_lost,
-    boxAppearanceCount: dbSong.box_appearance_count,
-    status: dbSong.status,
-    lyrics: dbSong.lyrics,
-    playCount: dbSong.play_count,
-    upvotes: dbSong.upvotes,
-    downvotes: dbSong.downvotes,
-    lastPlayedAt: dbSong.last_played_at,
-    createdAt: dbSong.created_at,
-});
+const mapDbSongToAppSong = (dbSong: DbSong): Song => {
+    let audioUrl = dbSong.audio_url;
+
+    // Check if audio_url is a storage path instead of a full URL
+    if (audioUrl && !audioUrl.startsWith('http')) {
+        console.log(`🔧 Converting storage path to public URL: ${audioUrl}`);
+        // It's a storage path, convert it to a public URL
+        const { data } = supabase!.storage.from('songs').getPublicUrl(audioUrl);
+        audioUrl = data.publicUrl;
+        console.log(`✅ Generated public URL: ${audioUrl}`);
+    }
+
+    const mapped = {
+        id: dbSong.id,
+        uploaderId: dbSong.uploader_id,
+        title: dbSong.title,
+        artistName: dbSong.artist_name,
+        source: dbSong.source,
+        audioUrl: audioUrl,
+        coverArtUrl: dbSong.cover_art_url,
+        durationSec: dbSong.duration_sec,
+        stars: dbSong.stars,
+        boxRoundsSeen: dbSong.box_rounds_seen,
+        boxRoundsLost: dbSong.box_rounds_lost,
+        boxAppearanceCount: dbSong.box_appearance_count,
+        status: dbSong.status,
+        lyrics: dbSong.lyrics,
+        playCount: dbSong.play_count,
+        upvotes: dbSong.upvotes,
+        downvotes: dbSong.downvotes,
+        lastPlayedAt: dbSong.last_played_at,
+        createdAt: dbSong.created_at,
+    };
+
+    console.log(`🎵 Mapped song "${mapped.title}": audioUrl = "${mapped.audioUrl}"`);
+    return mapped;
+};
 
 
 /**

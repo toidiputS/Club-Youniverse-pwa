@@ -57,7 +57,10 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
     const [userHasVoted, setUserHasVoted] = useState(false);
     const prevSongsRef = useRef<Song[]>([]);
     const lastDjRef = useRef<string>(currentDj.name);
-    // Ref to track song pool length to start the radio from an empty state.
+
+    // Refs for startNextRound recursion fix
+    const lastRoundStartRef = useRef(0);
+    const startNextRoundRef = useRef<() => void>(() => { });
 
 
     // Effect to check for DJ shift changes periodically.
@@ -82,9 +85,6 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
     useEffect(() => {
         setSongPool(songs);
     }, [songs]);
-
-    // Effect to restore the broadcast state from the database on initial load.
-    // This ensures all users tune in to the same song at the same time.
 
 
     // Effect to detect a new song submission and check if it qualifies for a priority debut.
@@ -136,12 +136,6 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
     }, [addDjQueueItem, profile?.name]);
 
     /**
-     * Selects up to three candidate songs for the next round from the song pool.
-     */
-    /**
-     * Selects candidate songs for the next round from the song pool.
-     */
-    /**
      * Selects candidate songs for the next round from the song pool.
      * Ensures we always return the requested count, even if we have to recycle songs (for small pools).
      */
@@ -163,8 +157,6 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
         availableSongs.sort(() => 0.5 - Math.random()); // Simple random shuffle.
         return availableSongs.slice(0, count);
     }, [nowPlaying?.id]);
-
-    const lastRoundStartRef = useRef(0);
 
     /**
      * Starts the next round of voting by selecting candidates and setting up the state.
@@ -239,11 +231,10 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
 
             await addDjQueueItem('empty_queue_banter');
             setRadioState('DJ_TALKING');
-            // Try again in 5 seconds
-            setTimeout(startNextRound, 5000);
+            // Try again in 5 seconds - use ref to break cycle
+            setTimeout(() => startNextRoundRef.current(), 5000);
             return;
         }
-
 
         let nextNowPlaying = nowPlaying;
         let boxCandidates: Song[] = [];
@@ -271,6 +262,7 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
             setBoxRound({ id: `round-${Date.now()}`, candidates: boxCandidates, startedAt: new Date().toISOString() });
             setSongPool(pool => pool.map(s => boxCandidates.some(c => c.id === s.id) ? { ...s, status: 'in_box' } : s));
             setVoteCounts({});
+            console.log("🔄 Resetting userHasVoted to false for new round");
             setUserHasVoted(false);
             setRadioState('BOX_VOTING');
 
@@ -284,6 +276,11 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
         }
 
     }, [songPool, prioritySong, selectNextCandidates, addDjQueueItem, setNowPlaying, setRadioState, setBoxRound, setVoteCounts, setPrioritySong, boxRound, nowPlaying]);
+
+    // Update the ref whenever startNextRound changes
+    useEffect(() => {
+        startNextRoundRef.current = startNextRound;
+    }, [startNextRound]);
 
     // Effect to restore the broadcast state from the database on initial load.
     // This ensures all users tune in to the same song at the same time.
@@ -429,19 +426,6 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
                     updateSong(z.id, { status: 'pool' });
                 });
 
-                // 3. Start next round with the CLEAN pool
-                // We need to pass the clean pool explicitly or wait for state update?
-                // startNextRound uses 'songPool' from closure. 
-                // We can't rely on the state update being visible immediately in this closure.
-                // So we'll call a helper or pass the pool to startNextRound?
-                // startNextRound doesn't take args.
-                // But we can trigger it via a timeout or just rely on the effect that watches songPool?
-                // No, the effect watches songPool length or other things.
-
-                // Let's just update the state and let the "kick-start" effect handle it?
-                // The kick-start effect watches: [songPool, nowPlaying, radioState, isLoading, startNextRound]
-                // If we set isLoading(false) here, and update songPool...
-
                 setIsLoading(false);
                 // The new "Auto-Start" effect will detect the updated songPool and trigger startNextRound automatically.
 
@@ -461,8 +445,6 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
             startNextRound();
         }
     }, [boxUpdateTrigger, startNextRound]);
-
-
 
     // Effect to kick-start the radio when valid songs are available and the radio is idle.
     useEffect(() => {
@@ -608,7 +590,7 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
             } else {
                 // No Box was active, just start next round normally
                 setTimeout(() => {
-                    startNextRound();
+                    startNextRoundRef.current();
                 }, POST_SONG_DELAY_MS);
             }
         };
