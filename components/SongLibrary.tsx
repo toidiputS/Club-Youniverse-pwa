@@ -4,7 +4,8 @@
  */
 
 import React from 'react';
-import type { Song, View } from '../types';
+import { downloadSong } from '../services/downloadService';
+import type { Song, View, Profile } from '../types';
 import { SectionCard } from './SectionCard';
 import { StarRating } from './StarRating';
 
@@ -12,6 +13,7 @@ interface SongLibraryProps {
     songs: Song[];
     onBackToStudio: () => void;
     onNavigate: (view: View) => void;
+    profile: Profile;
 }
 
 /**
@@ -38,7 +40,7 @@ const statusColors: Record<Song['status'], string> = {
     debut: 'bg-red-500/20 text-red-300 animate-pulse',
 };
 
-export const SongLibrary: React.FC<SongLibraryProps> = ({ songs, onBackToStudio, onNavigate }) => {
+export const SongLibrary: React.FC<SongLibraryProps> = ({ songs, onBackToStudio, onNavigate, profile }) => {
 
     /**
      * Renders the main content: either the list of songs or an empty state message.
@@ -95,6 +97,34 @@ export const SongLibrary: React.FC<SongLibraryProps> = ({ songs, onBackToStudio,
                                         {statusLabels[song.status]}
                                     </span>
                                 </div>
+                                {/* Download button - VIP ONLY */}
+                                <div className="flex-shrink-0">
+                                    {profile.is_premium ? (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                downloadSong(song);
+                                            }}
+                                            className="p-2 text-gray-400 hover:text-[var(--accent-primary)] transition-colors"
+                                            title="Download Track"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                            </svg>
+                                        </button>
+                                    ) : (
+                                        <div className="group/lock relative">
+                                            <div className="p-2 text-gray-600 grayscale cursor-not-allowed">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                </svg>
+                                            </div>
+                                            <div className="absolute bottom-full right-0 mb-2 hidden group-hover/lock:block bg-black text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-30 shadow-xl">
+                                                VIP Only
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </SectionCard>
                     </div>
@@ -104,70 +134,74 @@ export const SongLibrary: React.FC<SongLibraryProps> = ({ songs, onBackToStudio,
     }
 
     return (
-        <div className="space-y-8">
-            <header className="flex justify-between items-start mb-4">
-                <div className="text-left">
-                    <h1 className="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[var(--accent-primary)] via-[var(--accent-secondary)] to-[var(--accent-primary)] font-display">
-                        Song Library
-                    </h1>
-                    <p className="mt-2 text-[var(--text-secondary)]">All of your submitted tracks, in one place.</p>
+        <div className="flex flex-col h-full space-y-4">
+            <div className="flex-shrink-0">
+                <header className="flex justify-between items-start mb-4">
+                    <div className="text-left">
+                        <h1 className="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[var(--accent-primary)] via-[var(--accent-secondary)] to-[var(--accent-primary)] font-display">
+                            Song Library
+                        </h1>
+                        <p className="mt-2 text-[var(--text-secondary)]">All of your submitted tracks, in one place.</p>
+                    </div>
+                    <button
+                        onClick={onBackToStudio}
+                        className="text-sm bg-[var(--accent-secondary)] text-white font-bold py-2 px-4 rounded-lg hover:bg-[var(--accent-primary)] transition-colors"
+                    >
+                        &larr; Back to Studio
+                    </button>
+                </header>
+
+                <div className="flex justify-end mb-2 gap-2">
+                    <button
+                        onClick={async () => {
+                            const { supabase } = await import('../services/supabaseClient');
+                            const { getUserSongs } = await import('../services/supabaseSongService');
+
+                            try {
+                                const user = (await supabase.auth.getUser()).data.user;
+                                if (!user) {
+                                    alert("❌ You are not logged in.");
+                                    return;
+                                }
+
+                                // 1. Check Global Pool
+                                const { data: globalData } = await supabase.from('songs').select('count', { count: 'exact', head: true });
+
+                                // 2. Check User Songs
+                                const userSongs = await getUserSongs(user.id);
+
+                                let msg = `📊 DIAGNOSTICS:\n\n`;
+                                msg += `User ID: ${user.id.slice(0, 8)}...\n`;
+                                msg += `Global DB Row Count: ${globalData?.length ?? 'N/A'}\n`; // This might be wrong if using head:true, checking count instead
+
+                                // Re-do count query correctly
+                                const countQuery = await supabase.from('songs').select('*', { count: 'exact', head: true });
+                                msg += `Total Rows in DB: ${countQuery.count}\n`;
+
+                                if (countQuery.error) {
+                                    msg += `❌ DB Error: ${countQuery.error.message}\n`;
+                                    msg += `(This usually means RLS policies are blocking access)\n`;
+                                }
+
+                                msg += `Your Visible Songs: ${userSongs.length}\n`;
+
+                                alert(msg);
+                                window.location.reload();
+
+                            } catch (e: any) {
+                                alert(`❌ CRITICAL ERROR: ${e.message}`);
+                            }
+                        }}
+                        className="text-xs bg-purple-600 text-white px-3 py-1 rounded hover:bg-purple-500"
+                    >
+                        🕵️ Run Diagnostics
+                    </button>
                 </div>
-                <button
-                    onClick={onBackToStudio}
-                    className="text-sm bg-[var(--accent-secondary)] text-white font-bold py-2 px-4 rounded-lg hover:bg-[var(--accent-primary)] transition-colors"
-                >
-                    &larr; Back to Studio
-                </button>
-            </header>
-
-            <div className="flex justify-end mb-4 gap-2">
-                <button
-                    onClick={async () => {
-                        const { supabase } = await import('../services/supabaseClient');
-                        const { getAllSongs, getUserSongs } = await import('../services/supabaseSongService');
-
-                        try {
-                            const user = (await supabase.auth.getUser()).data.user;
-                            if (!user) {
-                                alert("❌ You are not logged in.");
-                                return;
-                            }
-
-                            // 1. Check Global Pool
-                            const { data: globalData, error: globalError } = await supabase.from('songs').select('count', { count: 'exact', head: true });
-
-                            // 2. Check User Songs
-                            const userSongs = await getUserSongs(user.id);
-
-                            let msg = `📊 DIAGNOSTICS:\n\n`;
-                            msg += `User ID: ${user.id.slice(0, 8)}...\n`;
-                            msg += `Global DB Row Count: ${globalData?.length ?? 'N/A'}\n`; // This might be wrong if using head:true, checking count instead
-
-                            // Re-do count query correctly
-                            const countQuery = await supabase.from('songs').select('*', { count: 'exact', head: true });
-                            msg += `Total Rows in DB: ${countQuery.count}\n`;
-
-                            if (countQuery.error) {
-                                msg += `❌ DB Error: ${countQuery.error.message}\n`;
-                                msg += `(This usually means RLS policies are blocking access)\n`;
-                            }
-
-                            msg += `Your Visible Songs: ${userSongs.length}\n`;
-
-                            alert(msg);
-                            window.location.reload();
-
-                        } catch (e: any) {
-                            alert(`❌ CRITICAL ERROR: ${e.message}`);
-                        }
-                    }}
-                    className="text-xs bg-purple-600 text-white px-3 py-1 rounded hover:bg-purple-500"
-                >
-                    🕵️ Run Diagnostics
-                </button>
             </div>
 
-            {renderContent()}
+            <div className="flex-grow overflow-y-auto min-h-0 pr-2 pb-4">
+                {renderContent()}
+            </div>
         </div>
     );
 };

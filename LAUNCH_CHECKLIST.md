@@ -54,8 +54,8 @@
 2. ✅ Test 3-round elimination (songs that lose 3x drop a star)
 3. ✅ Ensure winner plays after voting ends
 4. ✅ Test the "box appearance counter" (3 red dots)
-5. ⚠️ **BUG TO FIX:** Verify `boxAppearanceCount` persists to database
-6. ⚠️ **BUG TO FIX:** Songs might not be rotating back to pool correctly
+5. ✅ (**FIXED**) Verify `boxAppearanceCount` persists to database
+6. ✅ (**FIXED**) Songs might not be rotating back to pool correctly
 
 **Test Case:**
 1. Upload 5+ songs
@@ -245,9 +245,19 @@ Use different models based on importance:
 **Symptom:** Songs might not properly return to pool after box rounds.
 
 **Fix:**
-- Add database persistence for `boxAppearanceCount`, `boxRoundsLost`
-- Currently these are only in React state, not saved to DB
-- Update `supabaseSongService.ts` to save these fields
+- ✅ **COMPLETED**: Added database persistence for `boxAppearanceCount`, `boxRoundsLost`
+- ✅ **COMPLETED**: Updated `Radio.tsx` to handle persistence directly
+- ✅ **COMPLETED**: Verified `supabaseSongService.ts` handles the updates
+
+---
+
+### **Bug #4: Real-Time Synchronization (Split Reality)**
+**Symptom:** Users hear different "next songs" because client-side logic drifts.
+
+**Fix:**
+- [ ] Implement Supabase Real-Time subscriptions in `App.tsx`
+- [ ] Push "Now Playing" updates to all connected clients
+- [ ] Ensure all listeners sync to the database state on song change
 
 ---
 

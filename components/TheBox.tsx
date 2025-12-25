@@ -18,7 +18,7 @@ interface TheBoxProps {
     voteCounts: Record<string, number>;
 }
 
-export const TheBox: React.FC<TheBoxProps> = ({ candidates, onVote, isVotingActive, userHasVoted }) => {
+export const TheBox: React.FC<TheBoxProps> = ({ candidates, onVote, isVotingActive, userHasVoted, voteCounts }) => {
     const {
         playSnippet,
         stopSnippet,
@@ -26,73 +26,101 @@ export const TheBox: React.FC<TheBoxProps> = ({ candidates, onVote, isVotingActi
     } = useContext(RadioContext);
 
     return (
-        <div className="flex gap-4 justify-center pb-4">
+        <div className="w-full max-w-5xl mx-auto h-[280px] flex gap-2 px-4 items-center justify-center">
             {candidates.map(song => (
-                <div key={song.id} className="w-32 flex-shrink-0 group">
-                    <SectionCard className="animate-fade-in transition-all duration-300 hover:scale-105 hover:z-10 hover:shadow-[0_0_20px_var(--accent-primary)] group-hover:border-[var(--accent-primary)]">
-                        <div className="flex flex-col p-2 gap-1">
-                            {/* Cover Art */}
-                            <div className="relative aspect-square w-full overflow-hidden rounded mb-1">
-                                <img src={song.coverArtUrl} alt={song.title} className="w-full h-full object-cover" />
-                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (snippetPlayingUrl === song.audioUrl) {
-                                                stopSnippet();
-                                            } else {
-                                                playSnippet(song.audioUrl);
-                                            }
-                                        }}
-                                        className="p-2 rounded-full bg-white/20 hover:bg-white/40 backdrop-blur-sm transition-all"
-                                    >
-                                        {snippetPlayingUrl === song.audioUrl ? (
-                                            <div className="w-4 h-4 flex items-center justify-center">
-                                                <div className="w-1.5 h-1.5 bg-white rounded-sm animate-pulse" />
-                                            </div>
-                                        ) : (
-                                            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                            </svg>
-                                        )}
-                                    </button>
-                                </div>
+                <div
+                    key={song.id}
+                    className="
+                        relative flex-1 hover:flex-[3] 
+                        transition-[flex] duration-500 ease-out 
+                        h-full rounded-2xl overflow-hidden 
+                        cursor-pointer group 
+                        border border-white/5 hover:border-[#00ffeb]/50 
+                        bg-gradient-to-br from-[#1a1a1a] to-black
+                        hover:shadow-[0_4px_30px_rgba(0,255,235,0.15)]
+                    "
+                    onClick={() => !userHasVoted && onVote(song.id)}
+                >
+                    {/* Background Glow / Image */}
+                    <div className="absolute inset-0">
+                        <img
+                            src={song.coverArtUrl}
+                            alt={song.title}
+                            className="w-full h-full object-cover opacity-20 group-hover:opacity-40 transition-opacity duration-500 grayscale group-hover:grayscale-0"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80" />
+                    </div>
+
+                    {/* Content Container */}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
+
+                        {/* COLLAPSED STATE: Vertical Text */}
+                        <div className="absolute inset-0 flex items-center justify-center transition-opacity duration-300 group-hover:opacity-0 delay-0 group-hover:delay-0 opacity-100">
+                            <div className="text-center px-2">
+                                <h4 className="text-sm font-bold text-white/90 mb-1 leading-tight">{song.title}</h4>
+                                <p className="text-xs text-[#00ffeb]/80 uppercase tracking-wide">{song.artistName}</p>
+                            </div>
+                        </div>
+
+                        {/* EXPANDED STATE: Full Details */}
+                        <div className="
+                            opacity-0 group-hover:opacity-100 
+                            transition-all duration-500 delay-100 
+                            transform translate-y-8 group-hover:translate-y-0
+                            flex flex-col items-center text-center gap-3 w-full
+                        ">
+                            {/* Snippet Toggle */}
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (snippetPlayingUrl === song.audioUrl) {
+                                        stopSnippet();
+                                    } else {
+                                        playSnippet(song.audioUrl);
+                                    }
+                                }}
+                                className="w-10 h-10 rounded-full bg-white/10 hover:bg-[#00ffeb]/20 flex items-center justify-center backdrop-blur-md border border-white/10 transition-colors"
+                            >
+                                {snippetPlayingUrl === song.audioUrl ? (
+                                    <div className="w-1.5 h-1.5 bg-[#00ffeb] rounded-sm animate-pulse" />
+                                ) : (
+                                    <svg className="w-4 h-4 text-[#00ffeb]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                    </svg>
+                                )}
+                            </button>
+
+                            <div>
+                                <h3 className="text-xl md:text-2xl font-black text-white leading-tight tracking-tight drop-shadow-md">
+                                    {song.title}
+                                </h3>
+                                <p className="text-xs font-bold text-[#00ffeb] tracking-widest uppercase mt-1">
+                                    {song.artistName}
+                                </p>
                             </div>
 
-                            {/* Info */}
-                            <div className="flex-grow min-w-0">
-                                <h4 className="font-bold text-xs font-display text-white truncate leading-tight" title={song.title}>{song.title}</h4>
-                                <p className="text-[10px] text-gray-400 truncate" title={song.artistName}>{song.artistName}</p>
-                                <div className="flex items-center gap-1 mt-0.5">
-                                    <span className="text-yellow-400 text-[10px]">{'⭐'.repeat(Math.min(5, song.stars))}</span>
-                                </div>
+                            <div className="flex items-center gap-1 text-[10px] text-yellow-500/80">
+                                {'⭐'.repeat(Math.min(5, song.stars || 0))}
                             </div>
 
                             {/* Vote Button */}
                             <button
-                                onClick={() => !userHasVoted && onVote(song.id)}
                                 disabled={!isVotingActive || userHasVoted}
-                                className={`w-full py-1 px-2 rounded font-bold text-[10px] uppercase tracking-wider transition-all flex items-center justify-center gap-1
+                                className={`
+                                    mt-2 px-8 py-2 rounded-full font-bold text-xs uppercase tracking-widest
+                                    transition-all duration-300
                                     ${userHasVoted
                                         ? 'bg-white/10 text-white/30 cursor-not-allowed'
-                                        : 'bg-yellow-500 text-gray-900 hover:bg-yellow-400 shadow-lg shadow-yellow-500/20'
-                                    }`}
+                                        : 'bg-[#00ffeb] text-black hover:bg-white hover:shadow-[0_0_20px_#00ffeb]'
+                                    }
+                                `}
                             >
-                                {userHasVoted ? 'Voted' : 'Vote'}
+                                {userHasVoted ? (voteCounts[song.id] ? `${voteCounts[song.id]} Votes` : 'Voted') : 'VOTE'}
                             </button>
                         </div>
-                    </SectionCard>
+                    </div>
                 </div>
             ))}
-            <style>{`
-                .animate-fade-in {
-                    animation: fadeIn 0.5s ease-in-out;
-                }
-                @keyframes fadeIn {
-                    from { opacity: 0; transform: translateY(10px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-            `}</style>
         </div>
     );
 };

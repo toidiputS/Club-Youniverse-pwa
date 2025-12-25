@@ -79,57 +79,80 @@ export const AudioVisualizer: React.FC = () => {
   useEffect(() => {
     if (!containerRef.current) return;
     const container = containerRef.current;
-    
+
     if (container.querySelector('canvas')) {
-        return;
+      return;
     }
-    
-    const scene = new THREE.Scene();
-    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    container.appendChild(renderer.domElement);
 
-    const material = new THREE.ShaderMaterial({
-      uniforms: {
-        iTime: { value: 0 },
-        iResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
-      },
-      vertexShader: vertexShader,
-      fragmentShader: fragmentShader
-    });
-
-    const geometry = new THREE.PlaneGeometry(2, 2);
-    const mesh = new THREE.Mesh(geometry, material);
-    scene.add(mesh);
-
+    let scene: THREE.Scene | undefined;
+    let camera: THREE.OrthographicCamera | undefined;
+    let renderer: THREE.WebGLRenderer | undefined;
+    let material: THREE.ShaderMaterial | undefined;
+    let geometry: THREE.PlaneGeometry | undefined;
     let frameId: number;
-    const animate = () => {
-      material.uniforms.iTime.value += 0.016;
-      renderer.render(scene, camera);
-      frameId = requestAnimationFrame(animate);
-    };
-    animate();
 
     const handleResize = () => {
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      material.uniforms.iResolution.value.set(window.innerWidth, window.innerHeight);
+      if (renderer && material) {
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        material.uniforms.iResolution.value.set(window.innerWidth, window.innerHeight);
+      }
     };
-    window.addEventListener('resize', handleResize);
+
+    try {
+      scene = new THREE.Scene();
+      camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+      // Attempt to create renderer - this might throw on some systems
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      container.appendChild(renderer.domElement);
+
+      material = new THREE.ShaderMaterial({
+        uniforms: {
+          iTime: { value: 0 },
+          iResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
+        },
+        vertexShader: vertexShader,
+        fragmentShader: fragmentShader
+      });
+
+      geometry = new THREE.PlaneGeometry(2, 2);
+      const mesh = new THREE.Mesh(geometry, material);
+      scene.add(mesh);
+
+      const animate = () => {
+        if (material && renderer && scene && camera) {
+          material.uniforms.iTime.value += 0.016;
+          renderer.render(scene, camera);
+        }
+        frameId = requestAnimationFrame(animate);
+      };
+      animate();
+
+      window.addEventListener('resize', handleResize);
+
+    } catch (error) {
+      console.warn("⚠️ AudioVisualizer: WebGL not supported or disabled. Falling back to CSS background.", error);
+      // Optional: Could add a CSS class or style to container for fallback if needed
+      // For now, the app has a default background so this is fine.
+    }
 
     return () => {
-      cancelAnimationFrame(frameId);
+      if (frameId) cancelAnimationFrame(frameId);
       window.removeEventListener('resize', handleResize);
-      if (container && renderer.domElement) {
+      if (container && renderer && renderer.domElement) {
         try {
+          // Check if child still exists before removing
+          if (container.contains(renderer.domElement)) {
             container.removeChild(renderer.domElement);
+          }
         } catch (e) {
-            // Ignore if element is already gone
+          // Ignore removal errors
         }
       }
-      geometry.dispose();
-      material.dispose();
-      renderer.dispose();
+      if (geometry) geometry.dispose();
+      if (material) material.dispose();
+      if (renderer) renderer.dispose();
     };
   }, []);
 

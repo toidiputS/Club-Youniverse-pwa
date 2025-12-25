@@ -7,11 +7,14 @@ import { SectionCard } from './SectionCard';
 import { Loader } from './Loader';
 import { generateAlbumCover } from '../services/geminiService';
 import { estimateAlbumCoverCost } from '../services/costEstimator';
-import type { GalleryItem } from '../types';
+import { PremiumUpgrade } from './PremiumUpgrade';
+import type { GalleryItem, Profile } from '../types';
 
 interface AlbumCoverGeneratorProps {
     onBackToStudio: () => void;
     onCreationComplete: (item: Omit<GalleryItem, 'id'>) => void;
+    profile: Profile;
+    setProfile: React.Dispatch<React.SetStateAction<Profile | null>>;
 }
 
 // Helper to format currency
@@ -20,7 +23,7 @@ const formatCurrency = (amount: number) => {
 };
 
 
-export const AlbumCoverGenerator: React.FC<AlbumCoverGeneratorProps> = ({ onBackToStudio, onCreationComplete }) => {
+export const AlbumCoverGenerator: React.FC<AlbumCoverGeneratorProps> = ({ onBackToStudio, onCreationComplete, profile, setProfile }) => {
     // State for the form inputs and generation process.
     const [prompt, setPrompt] = useState('');
     const [title, setTitle] = useState('');
@@ -28,6 +31,37 @@ export const AlbumCoverGenerator: React.FC<AlbumCoverGeneratorProps> = ({ onBack
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+    const [showUpgradeFlow, setShowUpgradeFlow] = useState(false);
+
+    if (showUpgradeFlow || !profile.is_premium) {
+        return (
+            <div className="max-w-4xl mx-auto w-full">
+                <header className="flex justify-between items-start mb-12">
+                    <div className="text-left">
+                        <h1 className="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[var(--accent-primary)] via-[var(--accent-secondary)] to-[var(--accent-primary)] font-display">
+                            VIP Access Only
+                        </h1>
+                        <p className="mt-2 text-[var(--text-secondary)]">Only VIPs can access AI branding tools.</p>
+                    </div>
+                    <button
+                        onClick={onBackToStudio}
+                        className="text-sm bg-gray-800 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors"
+                    >
+                        &larr; Back to Studio
+                    </button>
+                </header>
+
+                <PremiumUpgrade
+                    profile={profile}
+                    onUpgradeComplete={(updated) => {
+                        setProfile(updated);
+                        setShowUpgradeFlow(false);
+                    }}
+                    onCancel={onBackToStudio}
+                />
+            </div>
+        );
+    }
 
     // Get the fixed cost for generating one album cover.
     const estimatedCost = estimateAlbumCoverCost();
@@ -38,6 +72,12 @@ export const AlbumCoverGenerator: React.FC<AlbumCoverGeneratorProps> = ({ onBack
      */
     const handleGenerate = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (!profile.is_premium) {
+            setShowUpgradeFlow(true);
+            return;
+        }
+
         if (!prompt || !title) {
             setError('Please provide a song title and a descriptive prompt.');
             return;
@@ -52,7 +92,7 @@ export const AlbumCoverGenerator: React.FC<AlbumCoverGeneratorProps> = ({ onBack
             const fullPrompt = `Album cover for "${title}" by ${artist || 'an artist'}. Style: ${prompt}`;
             const result = await generateAlbumCover(fullPrompt);
             setGeneratedImageUrl(result.url);
-            
+
             // Add the new creation to the gallery.
             onCreationComplete({
                 type: 'album-cover',
@@ -67,11 +107,11 @@ export const AlbumCoverGenerator: React.FC<AlbumCoverGeneratorProps> = ({ onBack
             setIsLoading(false);
         }
     };
-    
+
     const inputStyles = "w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-4 py-3 text-[var(--text-primary)] placeholder-[var(--text-secondary)] focus:ring-2 focus:ring-[var(--accent-primary)] focus:border-[var(--accent-primary)] outline-none";
 
     return (
-        <>
+        <div className="animate-fade-in">
             <header className="flex justify-between items-start mb-12">
                 <div className="text-left">
                     <h1 className="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[var(--accent-primary)] via-[var(--accent-secondary)] to-[var(--accent-primary)] font-display">
@@ -79,14 +119,14 @@ export const AlbumCoverGenerator: React.FC<AlbumCoverGeneratorProps> = ({ onBack
                     </h1>
                     <p className="mt-2 text-[var(--text-secondary)]">Design beautiful, square album art for your music.</p>
                 </div>
-                <button 
-                    onClick={onBackToStudio} 
+                <button
+                    onClick={onBackToStudio}
                     className="text-sm bg-[var(--accent-secondary)] text-white font-bold py-2 px-4 rounded-lg hover:bg-[var(--accent-primary)] transition-colors"
                 >
                     &larr; Back to Studio
                 </button>
             </header>
-            
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Input form */}
                 <SectionCard>
@@ -95,19 +135,19 @@ export const AlbumCoverGenerator: React.FC<AlbumCoverGeneratorProps> = ({ onBack
                         <form onSubmit={handleGenerate} className="space-y-6">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <input
-                                  type="text"
-                                  placeholder="Song Title"
-                                  value={title}
-                                  onChange={(e) => setTitle(e.target.value)}
-                                  required
-                                  className={inputStyles}
+                                    type="text"
+                                    placeholder="Song Title"
+                                    value={title}
+                                    onChange={(e) => setTitle(e.target.value)}
+                                    required
+                                    className={inputStyles}
                                 />
                                 <input
-                                  type="text"
-                                  placeholder="Artist Name (Optional)"
-                                  value={artist}
-                                  onChange={(e) => setArtist(e.target.value)}
-                                  className={inputStyles}
+                                    type="text"
+                                    placeholder="Artist Name (Optional)"
+                                    value={artist}
+                                    onChange={(e) => setArtist(e.target.value)}
+                                    className={inputStyles}
                                 />
                             </div>
                             <textarea
@@ -124,7 +164,7 @@ export const AlbumCoverGenerator: React.FC<AlbumCoverGeneratorProps> = ({ onBack
                                 <span className="font-mono text-white ml-2">{formatCurrency(estimatedCost.total)}</span>
                                 <p className="text-xs text-gray-500 mt-1">Based on one Imagen 4.0 image generation.</p>
                             </div>
-                            
+
                             {error && <p className="text-red-400 text-sm text-center">{error}</p>}
 
                             <button
@@ -137,7 +177,7 @@ export const AlbumCoverGenerator: React.FC<AlbumCoverGeneratorProps> = ({ onBack
                         </form>
                     </div>
                 </SectionCard>
-                
+
                 {/* Output display area */}
                 <div className="group">
                     <SectionCard className="transition-all duration-500 group-hover:shadow-[0_0_20px_var(--accent-primary)] group-hover:border-[var(--accent-primary)]">
@@ -158,7 +198,7 @@ export const AlbumCoverGenerator: React.FC<AlbumCoverGeneratorProps> = ({ onBack
                             ) : (
                                 <div className="w-full aspect-square flex flex-col items-center justify-center bg-black/30 rounded-lg border-2 border-dashed border-gray-600">
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                     </svg>
                                     <p className="mt-4 text-gray-400">Your generated album cover will appear here.</p>
                                 </div>
@@ -167,6 +207,6 @@ export const AlbumCoverGenerator: React.FC<AlbumCoverGeneratorProps> = ({ onBack
                     </SectionCard>
                 </div>
             </div>
-        </>
+        </div>
     );
 };

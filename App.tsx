@@ -5,7 +5,7 @@
  * It also wraps the entire application in necessary context providers (Theme, Radio).
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { LoginScreen } from './components/LoginScreen';
 import { Studio } from './components/Studio';
 import { Radio } from './components/Radio';
@@ -25,7 +25,7 @@ import { DjTranscript } from './components/DjTranscript';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { RadioProvider } from './contexts/AudioPlayerContext';
 import { supabase } from './services/supabaseClient';
-import { getUserSongs, uploadAudioFile, addSongToDatabase, getAllSongs } from './services/supabaseSongService';
+import { getUserSongs, uploadAudioFile, addSongToDatabase } from './services/supabaseSongService';
 import type { View, GalleryItem, Song, Session, Profile } from './types';
 
 const App: React.FC = () => {
@@ -46,8 +46,7 @@ const App: React.FC = () => {
   const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([]);
   // State to store all songs submitted by the user.
   const [songLibrary, setSongLibrary] = useState<Song[]>([]);
-  // State to store ALL songs for the radio (global pool).
-  const [globalSongPool, setGlobalSongPool] = useState<Song[]>([]);
+  const isFetchingRef = useRef(false);
 
   // Effect to handle Supabase authentication and data fetching, dependent on the API key being ready.
   useEffect(() => {
@@ -55,84 +54,92 @@ const App: React.FC = () => {
     setLoading(true); // Start loading for auth check
 
     const fetchInitialData = async (session: Session | null) => {
-      console.log("🔄 App: fetchInitialData started", { session: session?.user?.id });
+      if (!session) {
+        setProfile(null);
+        setSongLibrary([]);
+        setLoading(false);
+        return;
+      }
+
+      console.log("🔄 App: fetchInitialData started", { userId: session.user.id });
       setSession(session);
+      setLoading(true);
+
       try {
-        if (session) {
-          console.log("🔄 App: Fetching profile for user:", session.user.id);
+        console.log("🔄 App: Fetching profile for user:", session.user.id);
 
-          // Create a promise that rejects after 5 seconds
-          const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Profile fetch timed out')), 5000)
-          );
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .single();
 
-          // Race the fetch against the timeout
-          const fetchPromise = supabase
+        if (profileError && profileError.code !== 'PGRST116') {
+          console.error("❌ App: Profile fetch error", profileError);
+          throw profileError;
+        }
+
+        // --- AUTO-CREATE PROFILE IF MISSING ---
+        if (!profileData) {
+          console.log("⚠️ App: Profile missing for user. Creating new profile...");
+          const newProfile = {
+            user_id: session.user.id,
+            name: session.user.user_metadata.name || 'New Artist',
+            is_premium: false,
+            is_artist: false,
+            is_admin: false,
+            roast_consent: false,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            stats: { plays: 0, uploads: 0, votes_cast: 0, graveyard_count: 0 }
+          };
+
+          const { data: createdProfile, error: createError } = await supabase
             .from('profiles')
-            .select('*')
-            .eq('user_id', session.user.id)
+            .insert([newProfile])
+            .select()
             .single();
 
-          let profileResult;
-          try {
-            profileResult = await Promise.race([fetchPromise, timeoutPromise]) as any;
-          } catch (e) {
-            console.error("❌ App: Profile fetch timed out or failed", e);
-            throw e; // Re-throw to catch block
+          if (createError) {
+            console.error("❌ App: Failed to create new profile", createError);
+            throw createError;
           }
 
-          const { data: profileData, error: profileError } = profileResult;
-
-          if (profileError) console.error("❌ App: Profile fetch error", profileError);
-          setProfile(profileData);
-
-          // Fetch the user's persisted song library from the database.
-          console.log("🔄 App: Fetching user songs...");
-          const userSongs = await getUserSongs(session.user.id);
-          console.log(`✅ App: User songs fetched: ${userSongs.length}`);
-          setSongLibrary(userSongs);
-
-          // Fetch ALL songs for the radio with retry logic.
-          console.log("🔄 App: Fetching global song pool...");
-          let allSongs = await getAllSongs();
-
-          // Retry up to 3 times if pool is empty (could be cold start or network blip)
-          let retries = 0;
-          while (allSongs.length === 0 && retries < 3) {
-            console.warn(`⚠️ App: Global pool empty. Retrying (${retries + 1}/3)...`);
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            allSongs = await getAllSongs();
-            retries++;
-          }
-
-          console.log(`✅ App: Global pool fetched: ${allSongs.length}`);
-          setGlobalSongPool(allSongs);
+          console.log("✅ App: New profile created successfully", createdProfile);
+          setProfile(createdProfile);
         } else {
-          setProfile(null);
-          setSongLibrary([]); // Clear library on logout.
-          setGlobalSongPool([]);
+          console.log("✅ App: Profile loaded successfully");
+          setProfile(profileData);
         }
+
+        // Fetch user songs
+        console.log("🔄 App: Fetching user songs...");
+        const userSongs = await getUserSongs(session.user.id);
+        console.log(`✅ App: User songs fetched: ${userSongs.length}`);
+        setSongLibrary(userSongs);
+
       } catch (error) {
         console.error('❌ App: Error loading initial data:', error);
-        // Continue anyway - don't block the UI
       } finally {
-        console.log("✅ App: fetchInitialData complete. Setting loading=false.");
+        isFetchingRef.current = false;
+        console.log("✅ App: fetchInitialData complete.");
         setLoading(false);
       }
     };
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      fetchInitialData(session);
-    });
-
+    // Use onAuthStateChange for both initial check and updates
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        // Ignore the initial session event as it is handled by getSession() above.
-        // This prevents a double-fetch race condition that can get stuck in loading.
-        if (event === 'INITIAL_SESSION') return;
-
-        setLoading(true);
-        await fetchInitialData(session);
+        console.log(`🔐 Auth Event: ${event}`);
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') {
+          fetchInitialData(session);
+        } else if (event === 'SIGNED_OUT') {
+          isFetchingRef.current = false;
+          setSession(null);
+          setProfile(null);
+          setSongLibrary([]);
+          setLoading(false);
+        }
       }
     );
 
@@ -171,6 +178,7 @@ const App: React.FC = () => {
       is_premium: true,
       is_artist: true,
       is_admin: true,
+      roast_consent: false,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       stats: { plays: 999999, uploads: 999, votes_cast: 999, graveyard_count: 0 }
@@ -179,7 +187,6 @@ const App: React.FC = () => {
     setSession(mockSession);
     setProfile(mockProfile);
     setSongLibrary([]); // Start clean or load default
-    setGlobalSongPool([]); // Start clean
   };
 
   /**
@@ -235,7 +242,6 @@ const App: React.FC = () => {
 
     // 4. Update local React state to show the new song immediately, placing it at the top of the list.
     setSongLibrary(prev => [savedSong, ...prev]);
-    setGlobalSongPool(prev => [savedSong, ...prev]); // Also add to global pool
   };
 
 
@@ -244,7 +250,7 @@ const App: React.FC = () => {
   // The main render method
   return (
     <ThemeProvider>
-      <RadioProvider>
+      <RadioProvider profile={profile} setProfile={setProfile}>
         <AudioVisualizer />
         <div className="h-screen relative z-10 flex flex-col">
           <main className="flex-grow flex flex-col p-4 sm:p-8 min-h-0">
@@ -262,7 +268,7 @@ const App: React.FC = () => {
               <>
                 {/* Radio is ALWAYS mounted and playing in background */}
                 <div className={currentView === 'radio' ? 'flex flex-col flex-grow min-h-0' : 'hidden'}>
-                  <Radio onNavigate={handleNavigate} songs={globalSongPool} profile={profile} setProfile={setProfile} />
+                  <Radio onNavigate={handleNavigate} songs={songLibrary} profile={profile} setProfile={setProfile} />
                 </div>
 
                 {/* Other views render conditionally */}
@@ -270,22 +276,22 @@ const App: React.FC = () => {
                   <Studio onNavigate={handleNavigate} profile={profile} />
                 )}
                 {currentView === 'song-submission' && (
-                  <SongSubmission onBackToStudio={() => handleNavigate('studio')} onSongSubmitted={addSongToLibrary} profile={profile} />
+                  <SongSubmission onBackToStudio={() => handleNavigate('studio')} onSongSubmitted={addSongToLibrary} profile={profile} setProfile={setProfile} />
                 )}
                 {currentView === 'song-library' && (
-                  <SongLibrary songs={songLibrary.filter(s => s.uploaderId === session.user.id)} onBackToStudio={() => handleNavigate('studio')} onNavigate={handleNavigate} />
+                  <SongLibrary songs={songLibrary.filter(s => s.uploaderId === session.user.id)} onBackToStudio={() => handleNavigate('studio')} onNavigate={handleNavigate} profile={profile} />
                 )}
                 {currentView === 'leaderboard' && (
-                  <Leaderboard onBackToStudio={() => handleNavigate('studio')} songs={songLibrary} />
+                  <Leaderboard onBackToStudio={() => handleNavigate('studio')} />
                 )}
                 {currentView === 'graveyard' && (
-                  <Graveyard onBackToStudio={() => handleNavigate('studio')} songs={songLibrary} />
+                  <Graveyard onBackToStudio={() => handleNavigate('studio')} />
                 )}
                 {currentView === 'album-cover' && (
-                  <AlbumCoverGenerator onBackToStudio={() => handleNavigate('studio')} onCreationComplete={addGalleryItem} />
+                  <AlbumCoverGenerator onBackToStudio={() => handleNavigate('studio')} onCreationComplete={addGalleryItem} profile={profile} setProfile={setProfile} />
                 )}
                 {currentView === 'music-video' && (
-                  <MusicVideoGenerator onBackToStudio={() => handleNavigate('studio')} onCreationComplete={addGalleryItem} onSongSubmitted={addSongToLibrary} />
+                  <MusicVideoGenerator onBackToStudio={() => handleNavigate('studio')} onCreationComplete={addGalleryItem} onSongSubmitted={addSongToLibrary} profile={profile} setProfile={setProfile} />
                 )}
                 {currentView === 'gallery' && (
                   <Gallery items={galleryItems} onBackToStudio={() => handleNavigate('studio')} />

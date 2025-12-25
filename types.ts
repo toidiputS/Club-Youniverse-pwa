@@ -30,6 +30,7 @@ export interface Profile {
   is_artist: boolean; // True if they have uploaded at least one song
   is_admin?: boolean;
   phone_number?: string;
+  roast_consent: boolean; // True if the user agrees to be roasted live on air
   created_at: string;
   updated_at: string;
   lastDebutAt?: string | null; // Tracks the timestamp of a failed debut for the 24-hour rule
@@ -211,7 +212,7 @@ export interface SelectBoxCandidatesOutput {
 }
 
 export interface DjBanterScriptInput {
-  event: 'intro' | 'outro' | 'new_box_round' | 'winner_announcement' | 'graveyard_roast' | 'filler' | 'weird_news_segment' | 'user_mention' | 'premium_cta' | 'new_artist_shoutout' | 'dj_shift_change' | 'debut_song_outro' | 'empty_queue_banter';
+  event: 'intro' | 'outro' | 'new_box_round' | 'winner_announcement' | 'graveyard_roast' | 'filler' | 'weird_news_segment' | 'user_mention' | 'premium_cta' | 'new_artist_shoutout' | 'dj_shift_change' | 'debut_song_outro' | 'empty_queue_banter' | 'system_explainer';
   song?: { title: string; artistName: string, finalRating?: number };
   djProfile?: DjProfile; // The profile of the DJ who is speaking
   context?: any; // e.g., "It's a close race!" or a news story
@@ -306,4 +307,29 @@ export interface VideoStylePlanOutput {
     t: number;
     text: string;
   }[];
+}
+
+// --- Lyric Visualization ---
+// Types for the lyric display system.
+
+export enum AnimationType {
+  BOUNCE = 'bounce',
+  SHAKE = 'shake',
+  GLITCH = 'glitch',
+  SLIDE = 'slide',
+  EXPLODE = 'explode'
+}
+
+export interface ChoreographedLine {
+  id: string;
+  text: string;
+  time?: number;
+  meta?: {
+    animation?: AnimationType;
+    fontFamily?: string;
+    color?: string;
+    rotation?: number;
+    scale?: number;
+    secondaryText?: string;
+  };
 }

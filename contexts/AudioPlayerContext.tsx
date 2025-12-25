@@ -8,7 +8,8 @@
 import React, { createContext, useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { generateDjBanter } from '../services/geminiStudioService';
 import { getCurrentDj } from '../logic/djRoster';
-import type { Song, RadioState, BoxRound, ChatMessage, DjQueueItem, DjBanterScriptInput, DjProfile } from '../types';
+import { getBroadcastManager } from '../services/globalBroadcastManager';
+import type { Song, RadioState, BoxRound, ChatMessage, DjQueueItem, DjBanterScriptInput, DjProfile, Profile } from '../types';
 
 // Defines the shape of the context data.
 interface RadioContextType {
@@ -55,6 +56,9 @@ interface RadioContextType {
     isPlaying: boolean;
     togglePlay: () => void;
     songEndedTrigger: number;
+    isLeader: boolean;
+    profile: Profile | null;
+    setProfile: React.Dispatch<React.SetStateAction<Profile | null>>;
 }
 
 // Create the context with default values.
@@ -100,25 +104,39 @@ export const RadioContext = createContext<RadioContextType>({
     isPlaying: false,
     togglePlay: () => { },
     songEndedTrigger: 0,
+    isLeader: false,
+    profile: null,
+    setProfile: () => { },
 });
 
-export const RadioProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const RadioProvider: React.FC<{ children: React.ReactNode, profile: Profile | null, setProfile: React.Dispatch<React.SetStateAction<Profile | null>> }> = ({ children, profile, setProfile }) => {
+    // Get the global broadcast manager singleton
+    const broadcastManager = useRef(getBroadcastManager()).current;
+
     // State managed by the context provider.
-    // Refs to hidden audio elements for playing snippets and the main track.
+    // Ref to hidden audio element for playing snippets (preview playback).
     const snippetAudioRef = useRef<HTMLAudioElement | null>(null);
-    const mainAudioRef = useRef<HTMLAudioElement | null>(null);
 
     const [nowPlaying, setNowPlayingState] = useState<Song | null>(null);
-    const [startOffset, setStartOffset] = useState<number>(0);
 
     const setNowPlaying = useCallback((song: Song | null, offset: number = 0) => {
         setNowPlayingState(song);
-        setStartOffset(offset);
-    }, []);
+        // Delegate to broadcast manager
+        broadcastManager.setNowPlaying(song, offset);
+    }, [broadcastManager]);
 
     const [prioritySong, setPrioritySong] = useState<Song | null>(null);
     const [djQueue, setDjQueue] = useState<DjQueueItem[]>([]);
-    const [radioState, setRadioState] = useState<RadioState>('DJ_BANTER_INTRO');
+    const [radioState, setRadioStateLocal] = useState<RadioState>('DJ_BANTER_INTRO');
+
+    const setRadioState = useCallback((newState: RadioState | ((prevState: RadioState) => RadioState)) => {
+        // If functional update, resolve it against current local state (optimistic)
+        const resolvedState = typeof newState === 'function' ? newState(radioState) : newState;
+
+        setRadioStateLocal(resolvedState);
+        broadcastManager.setRadioState(resolvedState);
+    }, [broadcastManager, radioState]);
+
     const [boxRound, setBoxRound] = useState<BoxRound | null>(null);
     const [voteCounts, setVoteCounts] = useState<Record<string, number>>({});
     const [snippetPlayingUrl, setSnippetPlayingUrl] = useState<string | null>(null);
@@ -138,23 +156,17 @@ export const RadioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // State to track if the main audio is actually playing (for UI toggle)
     const [isPlaying, setIsPlaying] = useState(false);
 
+    // Leader state
+    const [isLeader, setIsLeader] = useState(broadcastManager.isLeader);
+
 
 
     /**
      * Toggles the main audio playback.
      */
     const togglePlay = useCallback(() => {
-        const audioEl = mainAudioRef.current;
-        if (audioEl) {
-            if (audioEl.paused) {
-                audioEl.play().catch(e => console.error("Play failed", e));
-                setIsPlaying(true);
-            } else {
-                audioEl.pause();
-                setIsPlaying(false);
-            }
-        }
-    }, []);
+        broadcastManager.togglePlay().catch(e => console.error("Play failed", e));
+    }, [broadcastManager]);
 
     // WAIT. I cannot insert `togglePlay` here because `mainAudioRef` is not defined yet.
     // I will only insert `isPlaying` here.
@@ -273,10 +285,8 @@ export const RadioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
      * Seeks the main audio player to the specified time.
      */
     const seekTo = useCallback((time: number) => {
-        if (mainAudioRef.current) {
-            mainAudioRef.current.currentTime = time;
-        }
-    }, []);
+        broadcastManager.seekTo(time);
+    }, [broadcastManager]);
 
     /**
      * Generates a DJ script or fetches a pre-recorded line and adds it to the queue.
@@ -296,88 +306,67 @@ export const RadioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }, [currentDj]);
 
     /**
-     * Effect to control the playback of the main song.
-     * When `nowPlaying` changes, it plays the new song or pauses playback.
-     * Mutes main audio when a snippet preview is playing.
-     */
-    /**
-     * Effect to control the playback of the main song.
-     * When `nowPlaying` changes, it plays the new song.
-     */
-    /**
-     * Effect to control the playback of the main song.
-     * When `nowPlaying` changes, it plays the new song.
+     * Effect to sync React state with broadcast manager state.
+     * This subscribes to manager events and updates local state accordingly.
      */
     useEffect(() => {
-        const audioEl = mainAudioRef.current;
-        if (!audioEl) return;
-
-        if (nowPlaying) {
-            // Check if we are just updating metadata (same ID)
-            // We store the current src to compare, or just check the ID if we had a ref to previous ID.
-            // Since we don't have a ref to previous ID easily here without adding one, 
-            // we can check if the audioEl.src matches the new url.
-            const currentSrc = audioEl.src;
-            const newSrc = new URL(nowPlaying.audioUrl, window.location.href).href;
-
-            // If the source is the same, and we are NOT explicitly seeking (offset >= 0), do nothing to audio.
-            // If offset is -1, it's an explicit "metadata update only" signal.
-            if (currentSrc === newSrc && startOffset === -1) {
-                console.log("ℹ️ AudioContext: Metadata update only. Ignoring audio reset.");
-                return;
-            }
-
-            // If source is same but we have a valid offset, we might be seeking (e.g. restoration).
-            // If source is different, we must change it.
-
-            if (currentSrc !== newSrc) {
-                console.log("▶️ AudioContext: Changing track to:", nowPlaying.title);
+        const handleNowPlayingChanged = (song: Song | null) => {
+            setNowPlayingState(song);
+            if (song) {
                 clearLiveRatings();
-                audioEl.src = nowPlaying.audioUrl;
-                audioEl.currentTime = Math.max(0, startOffset); // Use offset if provided
-            } else if (startOffset >= 0 && Math.abs(audioEl.currentTime - startOffset) > 2) {
-                // Same track, but significant time difference requested (e.g. restoration sync)
-                console.log("⏩ AudioContext: Syncing time to:", startOffset);
-                audioEl.currentTime = startOffset;
             }
+        };
 
-            // Fix: Consistent ducking logic
-            const startVolume = snippetPlayingUrl ? (volume * 0.2) : volume;
-            audioEl.volume = startVolume;
-            audioEl.muted = isGloballyMuted;
+        const handlePlaybackStateChanged = (playing: boolean) => {
+            setIsPlaying(playing);
+        };
 
-            if (audioEl.paused) {
-                const playPromise = audioEl.play();
-                if (playPromise !== undefined) {
-                    playPromise.then(() => {
-                        console.log("✅ AudioContext: Playback started successfully.");
-                    }).catch(error => {
-                        console.error("❌ AudioContext: Main audio playback failed:", error);
-                    });
-                }
-            }
-        } else {
-            audioEl.pause();
-            audioEl.src = ''; // Clear source
+        const handleRadioStateChanged = (newState: RadioState) => {
+            setRadioStateLocal(newState);
+        };
+
+        const handleSongEnded = () => {
+            setSongEndedTrigger(prev => prev + 1);
+        };
+
+        const handleLeaderChanged = (leader: boolean) => {
+            setIsLeader(leader);
+        };
+
+        // Subscribe to broadcast manager events
+        broadcastManager.on('nowPlayingChanged', handleNowPlayingChanged);
+        broadcastManager.on('playbackStateChanged', handlePlaybackStateChanged);
+        broadcastManager.on('radioStateChanged', handleRadioStateChanged);
+        broadcastManager.on('songEnded', handleSongEnded);
+        broadcastManager.on('leaderChanged', handleLeaderChanged);
+
+        // Sync initial state
+        const initialSong = broadcastManager.getNowPlaying();
+        if (initialSong) {
+            setNowPlayingState(initialSong);
         }
-    }, [nowPlaying, startOffset]); // Re-run if song or offset changes
+        setRadioStateLocal(broadcastManager.getRadioState());
+        setIsPlaying(broadcastManager.isPlaying());
+        setIsLeader(broadcastManager.isLeader);
+
+        return () => {
+            broadcastManager.off('nowPlayingChanged', handleNowPlayingChanged);
+            broadcastManager.off('playbackStateChanged', handlePlaybackStateChanged);
+            broadcastManager.off('radioStateChanged', handleRadioStateChanged);
+            broadcastManager.off('songEnded', handleSongEnded);
+            broadcastManager.off('leaderChanged', handleLeaderChanged);
+        };
+    }, [broadcastManager, clearLiveRatings]);
 
     /**
-     * Effect to handle volume and mute changes without restarting the song.
+     * Effect to handle volume and mute changes.
      */
     useEffect(() => {
-        const audioEl = mainAudioRef.current;
-        if (!audioEl) return;
-
-        // "Muffle" the main audio (duck to 20%) when a snippet is playing,
-        // otherwise use the user's set volume.
+        // Duck volume when snippet is playing
         const effectiveVolume = snippetPlayingUrl ? (volume * 0.2) : volume;
-
-        console.log(`🔊 AudioContext: Volume update. User: ${volume}, Effective: ${effectiveVolume}, Muted: ${isGloballyMuted}`);
-
-        audioEl.volume = effectiveVolume;
-        audioEl.muted = isGloballyMuted;
-    }, [volume, isGloballyMuted, snippetPlayingUrl]);
+        broadcastManager.setVolume(effectiveVolume);
+        broadcastManager.setMuted(isGloballyMuted);
+    }, [volume, isGloballyMuted, snippetPlayingUrl, broadcastManager]);
 
     /**
      * GLOBAL AUTO-RESUME LISTENER
@@ -387,10 +376,9 @@ export const RadioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
      */
     useEffect(() => {
         const attemptResume = () => {
-            const audioEl = mainAudioRef.current;
-            if (nowPlaying && audioEl && audioEl.paused && !isPlaying) {
+            if (nowPlaying && !isPlaying) {
                 console.log("👆 User interaction detected. Attempting to auto-resume playback...");
-                audioEl.play().then(() => {
+                broadcastManager.play().then(() => {
                     console.log("✅ Auto-resume successful.");
                 }).catch(e => {
                     console.warn("⚠️ Auto-resume failed (browser might still be blocking):", e);
@@ -408,7 +396,7 @@ export const RadioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             document.removeEventListener('keydown', attemptResume);
             document.removeEventListener('touchstart', attemptResume);
         };
-    }, [nowPlaying, isPlaying]);
+    }, [nowPlaying, isPlaying, broadcastManager]);
 
     /**
      * Effect to control the playback of audio snippets.
@@ -503,29 +491,22 @@ export const RadioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         seekTo,
         playSnippet, stopSnippet,
         isPlaying, togglePlay,
-        songEndedTrigger // Export the trigger
+        songEndedTrigger, // Export the trigger
+        isLeader,
+        profile,
+        setProfile,
     }), [
         nowPlaying, prioritySong, djQueue, radioState, boxRound, voteCounts, snippetPlayingUrl,
         chatMessages, isTtsErrorMuted, isTtsUserMuted, volume, isGloballyMuted, currentDj,
         liveRatings, userLiveRating, skipCurrentSong, forceNewBoxRound, boxUpdateTrigger, seekTo,
-        playSnippet, stopSnippet, isPlaying, togglePlay, songEndedTrigger
+        playSnippet, stopSnippet, isPlaying, togglePlay, songEndedTrigger, isLeader,
+        profile, setProfile,
     ]);
 
     return (
         <RadioContext.Provider value={value}>
-            {/* Hidden audio elements managed by the context. */}
+            {/* Hidden audio element for snippet playback (broadcast manager handles main audio) */}
             <audio ref={snippetAudioRef} style={{ display: 'none' }} onEnded={() => setSnippetPlayingUrl(null)} />
-            <audio
-                ref={mainAudioRef}
-                style={{ display: 'none' }}
-                onPlay={() => setIsPlaying(true)}
-                onPause={() => setIsPlaying(false)}
-                onEnded={() => {
-                    setIsPlaying(false);
-                    setSongEndedTrigger(prev => prev + 1);
-                }}
-                onError={(e) => console.error("Audio Element Error:", e)}
-            />
             {children}
         </RadioContext.Provider>
     );

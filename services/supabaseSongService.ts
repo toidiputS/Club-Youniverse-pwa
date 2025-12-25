@@ -37,16 +37,12 @@ type DbSong = {
 const mapDbSongToAppSong = (dbSong: DbSong): Song => {
     let audioUrl = dbSong.audio_url;
 
-    // Check if audio_url is a storage path instead of a full URL
     if (audioUrl && !audioUrl.startsWith('http')) {
-        console.log(`🔧 Converting storage path to public URL: ${audioUrl}`);
-        // It's a storage path, convert it to a public URL
         const { data } = supabase!.storage.from('songs').getPublicUrl(audioUrl);
         audioUrl = data.publicUrl;
-        console.log(`✅ Generated public URL: ${audioUrl}`);
     }
 
-    const mapped = {
+    return {
         id: dbSong.id,
         uploaderId: dbSong.uploader_id,
         title: dbSong.title,
@@ -67,9 +63,6 @@ const mapDbSongToAppSong = (dbSong: DbSong): Song => {
         lastPlayedAt: dbSong.last_played_at,
         createdAt: dbSong.created_at,
     };
-
-    console.log(`🎵 Mapped song "${mapped.title}": audioUrl = "${mapped.audioUrl}"`);
-    return mapped;
 };
 
 
@@ -230,6 +223,28 @@ export const updateProfile = async (userId: string, updates: Partial<any>): Prom
         console.error('Error updating profile:', error);
         throw new Error('Failed to update profile.');
     }
+};
+
+/**
+ * Fetches a user's profile from the database.
+ * @param userId The ID of the user.
+ * @returns The user's profile or null if not found.
+ */
+export const getProfile = async (userId: string): Promise<any | null> => {
+    if (!supabase) throw new Error("Supabase client not initialized.");
+
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+    if (error) {
+        console.error('Error fetching profile:', error);
+        return null;
+    }
+
+    return data;
 };
 
 /**

@@ -58,7 +58,7 @@ export const LyricStage: React.FC<LyricStageProps> = ({ currentLine, nextLine, p
     const wordData = useMemo(() => {
         if (!currentLine?.text) return [];
 
-        return currentLine.text.split(' ').map((word) => ({
+        return currentLine.text.split(' ').map((word: string) => ({
             text: word,
             // Generate a random rotation between -6 and 6 degrees for a kinetic look
             rotation: (Math.random() - 0.5) * 12
@@ -90,7 +90,7 @@ export const LyricStage: React.FC<LyricStageProps> = ({ currentLine, nextLine, p
     const sizeClass = getAdaptiveSize(currentLine.text);
 
     // Helper to render the word set
-    const renderWords = (isReflection = false) => {
+    const renderWords = (_isReflection = false) => {
         // Dynamic stagger delay:
         // Base delay ranges from 0.12s (low intensity) down to 0.04s (high intensity)
         // Long sentences get a multiplier to speed up the sequence so it fits the measure
@@ -100,7 +100,7 @@ export const LyricStage: React.FC<LyricStageProps> = ({ currentLine, nextLine, p
 
         return (
             <div className="flex flex-wrap justify-center items-center gap-x-[0.3em] gap-y-1">
-                {wordData.map((item, i) => (
+                {wordData.map((item: { text: string; rotation: number }, i: number) => (
                     <span
                         key={`${currentLine.id}-${i}`}
                         className="inline-block origin-bottom"

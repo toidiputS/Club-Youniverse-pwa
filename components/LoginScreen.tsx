@@ -94,16 +94,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onShowPrivacy, onAdmin
               {isSignUp && (
                 <div>
                   <label htmlFor="artistName" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Artist Name (Optional for Listeners)</label>
-                  <input id="artistName" type="text" placeholder="Your creator name" value={artistName} onChange={(e) => setArtistName(e.target.value)} className={inputStyles} />
+                  <input id="artistName" name="artistName" type="text" placeholder="Your creator name" value={artistName} onChange={(e) => setArtistName(e.target.value)} className={inputStyles} autoComplete="nickname" />
                 </div>
               )}
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Email Address</label>
-                <input id="email" type="email" placeholder="you@email.com" value={email} onChange={(e) => setEmail(e.target.value)} className={inputStyles} />
+                <input id="email" name="email" type="email" placeholder="you@email.com" value={email} onChange={(e) => setEmail(e.target.value)} className={inputStyles} autoComplete="email" />
               </div>
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Password</label>
-                <input id="password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className={inputStyles} />
+                <input id="password" name="password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className={inputStyles} autoComplete={isSignUp ? "new-password" : "current-password"} />
               </div>
               {message && <p className="text-center text-green-400 text-sm">{message}</p>}
               {error && <p className="text-center text-red-400 text-sm">{error}</p>}

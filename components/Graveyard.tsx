@@ -7,31 +7,40 @@ import React, { useState, useEffect } from 'react';
 import type { Song } from '../types';
 import { SectionCard } from './SectionCard';
 import { Loader } from './Loader';
+import { supabase } from '../services/supabaseClient';
 
 interface GraveyardProps {
     onBackToStudio: () => void;
-    songs: Song[];
 }
 
-export const Graveyard: React.FC<GraveyardProps> = ({ onBackToStudio, songs: allSongs }) => {
+export const Graveyard: React.FC<GraveyardProps> = ({ onBackToStudio }) => {
     const [songs, setSongs] = useState<Song[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Effect to filter the graveyard songs from the props.
+    // Effect to fetch graveyard songs.
     useEffect(() => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const graveyardSongs = allSongs.filter(s => s.status === 'graveyard');
-            setSongs(graveyardSongs);
-        } catch (e: any) {
-            setError("Could not filter graveyard songs.");
-            console.error(e);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [allSongs]);
+        const fetchGraveyard = async () => {
+            setIsLoading(true);
+            setError(null);
+            try {
+                const { data, error } = await supabase
+                    .from('songs')
+                    .select('*')
+                    .eq('status', 'graveyard')
+                    .order('created_at', { ascending: false });
+
+                if (error) throw error;
+                setSongs((data || []).map(s => (s as any)));
+            } catch (e: any) {
+                setError("Could not fetch graveyard songs.");
+                console.error(e);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchGraveyard();
+    }, []);
 
     /**
      * Renders the list of songs, or loading/error states.

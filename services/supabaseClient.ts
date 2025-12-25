@@ -13,10 +13,9 @@ import { createClient } from '@supabase/supabase-js';
 // Use fallback object to prevent crash if import.meta.env is undefined.
 const env = import.meta.env || ({} as any);
 
-// Use environment variables if they are available, otherwise fall back to the public sample project.
-// This allows the app to run out-of-the-box without requiring developers to create a .env.local file.
-const supabaseUrl = env.VITE_SUPABASE_URL || "https://ksnjoyfsmbkvzqhpjhpr.supabase.co";
-const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtzbmpveWZzbWJrdnpxaHBqaHByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIxNDIzNzYsImV4cCI6MjA3NzcxODM3Nn0.GZ8HiOnUgeMvkZfqewShAiHAQ26_IXqz3_qPALRu7pU";
+// Use environment variables if they are available, otherwise fall back to the user's project ID.
+const supabaseUrl = env.VITE_SUPABASE_URL || "https://ktfezfnkghtwbkmhxdyd.supabase.co";
+const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY || "sb_publishable_Cpca6J3OdRz7czjQJN-KeQ_RNFc9QQU";
 
 // The Supabase client is now guaranteed to be created.
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);

@@ -6,6 +6,7 @@
 
 import { GoogleGenAI, Type, FunctionDeclaration, GenerateContentConfig } from "@google/genai";
 import { getRandomPremiumCalloutUrl } from './supabaseStorageService';
+import { getBankLine } from './djLineBank';
 import type {
     SelectBoxCandidatesInput,
     SelectBoxCandidatesOutput,
@@ -361,6 +362,29 @@ export const generateDjBanter = async (input: DjBanterScriptInput): Promise<DjQu
 
     const ai = getAiClient();
     const { djProfile } = input;
+
+    // HYBRID LOGIC: 
+    // 1. Certain events ALWAYS use the bank to save $ (intro, outro, filler, etc.)
+    // 2. Others use a mix (70% bank, 30% AI for freshness)
+    // 3. Complex events like user_mention ALWAYS use AI.
+
+    const highCostEvents = ['intro', 'outro', 'new_box_round', 'filler', 'empty_queue_banter', 'winner_announcement', 'graveyard_roast', 'new_artist_shoutout', 'debut_song_outro', 'system_explainer'];
+    const weight = Math.random();
+    const shouldKeepItStatic = highCostEvents.includes(input.event) && weight < 0.8; // 80% use bank for these
+
+    if (shouldKeepItStatic && input.event !== 'user_mention') {
+        const bankLine = getBankLine(input);
+        if (bankLine) {
+            console.log(`🏦 [Line Bank] Event: ${input.event}`);
+            return {
+                id: `dj-bank-${Date.now()}`,
+                type: 'tts',
+                content: bankLine,
+                djName: djProfile.name,
+            };
+        }
+    }
+
     const prompt = getBanterPrompt(input); // Use the new prompt generator
 
     try {
@@ -385,10 +409,35 @@ export const generateDjBanter = async (input: DjBanterScriptInput): Promise<DjQu
         }
 
         console.warn("Gemini did not return the expected function call for dj_banter_script for event:", input.event);
-        return null; // Return null if Gemini doesn't respond as expected
+
+        // FALLBACK: If Gemini fails to return a script, use the bank as a safety net.
+        const fallbackLine = getBankLine(input);
+        if (fallbackLine) {
+            return {
+                id: `dj-fallback-${Date.now()}`,
+                type: 'tts',
+                content: fallbackLine,
+                djName: djProfile.name,
+            };
+        }
+
+        return null;
     } catch (error) {
         console.error("Error calling Gemini for DJ banter:", error);
-        throw error; // Re-throw the error to be handled by the caller.
+
+        // CRITICAL FALLBACK: If API error (429, etc.), use the bank.
+        const fallbackLine = getBankLine(input);
+        if (fallbackLine) {
+            console.log("🚑 [Critical Fallback] Using Line Bank due to AI error");
+            return {
+                id: `dj-fallback-${Date.now()}`,
+                type: 'tts',
+                content: fallbackLine,
+                djName: djProfile.name,
+            };
+        }
+
+        throw error; // Re-throw if even the bank fails (unlikely)
     }
 };
 

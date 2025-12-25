@@ -4,13 +4,14 @@
  */
 
 import React, { useContext, useEffect, useState } from 'react';
+import { downloadSong } from '../services/downloadService';
 import { RadioContext } from '../contexts/AudioPlayerContext';
 import { SectionCard } from './SectionCard';
 import { LyricsFoldout } from './LyricsFoldout';
 import { InteractiveStarRating } from './InteractiveStarRating';
 
 export const NowPlaying: React.FC = () => {
-    const { nowPlaying, liveRatings, addLiveRating, userLiveRating, isPlaying, togglePlay } = useContext(RadioContext);
+    const { nowPlaying, liveRatings, addLiveRating, userLiveRating, isPlaying, togglePlay, profile } = useContext(RadioContext);
     // State to track the song's playback progress.
     const [progress, setProgress] = useState(0);
 
@@ -53,13 +54,9 @@ export const NowPlaying: React.FC = () => {
      * Triggers a download of the current song's audio file.
      */
     const handleDownload = () => {
-        if (!nowPlaying) return;
-        const a = document.createElement('a');
-        a.href = nowPlaying.audioUrl;
-        a.download = `${nowPlaying.artistName} - ${nowPlaying.title}.mp3`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        if (nowPlaying) {
+            downloadSong(nowPlaying);
+        }
     };
 
     const averageRating = liveRatings.length > 0
@@ -123,12 +120,29 @@ export const NowPlaying: React.FC = () => {
                                         </>
                                     )}
                                 </button>
-                                <button
-                                    onClick={handleDownload}
-                                    className="bg-[var(--accent-secondary)] text-white font-bold py-3 px-8 rounded-lg hover:bg-[var(--accent-primary)] transition-colors"
-                                >
-                                    Download Track
-                                </button>
+                                {profile?.is_premium ? (
+                                    <button
+                                        onClick={handleDownload}
+                                        className="bg-[var(--accent-secondary)] text-white font-bold py-3 px-8 rounded-lg hover:bg-[var(--accent-primary)] transition-colors"
+                                    >
+                                        Download Track
+                                    </button>
+                                ) : (
+                                    <div className="group/lock relative">
+                                        <button
+                                            disabled
+                                            className="bg-gray-800 text-gray-400 font-bold py-3 px-8 rounded-lg cursor-not-allowed flex items-center gap-2 opacity-50"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                            </svg>
+                                            Download (VIP)
+                                        </button>
+                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/lock:block bg-black text-white text-xs px-3 py-1 rounded whitespace-nowrap z-30 shadow-2xl border border-gray-700">
+                                            Upgrade to VIP in the Studio to Download
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

@@ -1,51 +1,46 @@
-/**
- * @file This component provides a form for users to submit their own songs to the radio's song pool.
- * It uses a mocked API call to simulate the submission process.
- */
-
 import React, { useState } from 'react';
 import { SectionCard } from './SectionCard';
 import { FileUpload } from './FileUpload';
 import { Loader } from './Loader';
+import { PremiumUpgrade } from './PremiumUpgrade';
 import type { Profile } from '../types';
 import { updateProfile } from '../services/supabaseSongService';
+import { getAudioDuration } from '../services/audioUtils';
 
 interface SongSubmissionProps {
     onBackToStudio: () => void;
     onSongSubmitted: (details: { title: string, artist: string, audioFile: File, durationSec: number }) => Promise<void>;
     profile: Profile;
+    setProfile: React.Dispatch<React.SetStateAction<Profile | null>>;
 }
 
-export const SongSubmission: React.FC<SongSubmissionProps> = ({ onBackToStudio, onSongSubmitted, profile }) => {
+export const SongSubmission: React.FC<SongSubmissionProps> = ({ onBackToStudio, onSongSubmitted, profile, setProfile }) => {
     // State for the form inputs and submission status.
     const [title, setTitle] = useState('');
     const [artist, setArtist] = useState(profile.name || '');
-    const [phoneNumber, setPhoneNumber] = useState(profile.phone_number || '');
     const [audioFile, setAudioFile] = useState<File | null>(null);
     const [audioDuration, setAudioDuration] = useState<number | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
+    const [showUpgradeFlow, setShowUpgradeFlow] = useState(false);
 
     const isFirstTimeArtist = !profile.is_artist;
 
     /**
-    * Handles file selection and calculates audio duration.
+    * Handles file selection and calculates audio duration using the utility.
     */
-    const handleFileSelect = (file: File | null) => {
+    const handleFileSelect = async (file: File | null) => {
         setAudioFile(file);
+        setError(null);
         if (file) {
-            const audioUrl = URL.createObjectURL(file);
-            const audio = new Audio(audioUrl);
-            audio.onloadedmetadata = () => {
-                setAudioDuration(audio.duration);
-                URL.revokeObjectURL(audioUrl);
-            };
-            audio.onerror = () => {
-                setError("Could not read audio file duration.");
+            try {
+                const duration = await getAudioDuration(file);
+                setAudioDuration(duration);
+            } catch (err: any) {
+                setError("Could not read audio file duration. Please try a different file.");
                 setAudioDuration(null);
-                URL.revokeObjectURL(audioUrl);
-            };
+            }
         } else {
             setAudioDuration(null);
         }
@@ -54,17 +49,17 @@ export const SongSubmission: React.FC<SongSubmissionProps> = ({ onBackToStudio, 
 
     /**
      * Handles the form submission.
-     * It validates inputs, creates FormData, calls the mock API, and handles success/error states.
      */
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!title || !artist || !audioFile || !audioDuration) {
-            setError('Please provide a Song Title, Artist Name, and a valid audio file.');
+
+        if (!profile.is_premium) {
+            setShowUpgradeFlow(true);
             return;
         }
 
-        if (isFirstTimeArtist && !phoneNumber) {
-            setError('A valid phone number is required for your Artist Debut.');
+        if (!title || !artist || !audioFile || !audioDuration) {
+            setError('Please provide a Song Title, Artist Name, and a valid audio file.');
             return;
         }
 
@@ -75,12 +70,12 @@ export const SongSubmission: React.FC<SongSubmissionProps> = ({ onBackToStudio, 
         try {
             // 1. If this is their first upload, transition them to ARTIST status.
             if (isFirstTimeArtist) {
-                await updateProfile(profile.user_id, {
+                const updates = {
                     is_artist: true,
                     name: artist,
-                    phone_number: phoneNumber,
-                    // Initialize stats if needed, though DB default handles it
-                });
+                };
+                await updateProfile(profile.user_id, updates);
+                setProfile({ ...profile, ...updates });
             }
 
             // 2. Submit the song
@@ -89,7 +84,6 @@ export const SongSubmission: React.FC<SongSubmissionProps> = ({ onBackToStudio, 
             setSuccess(`"${title}" has been successfully submitted! You are now an Official Artist.`);
             // Reset the form on success.
             setTitle('');
-            setArtist(profile.name || artist); // Keep artist name
             setAudioFile(null);
             setAudioDuration(null);
         } catch (e: any) {
@@ -98,6 +92,36 @@ export const SongSubmission: React.FC<SongSubmissionProps> = ({ onBackToStudio, 
             setIsLoading(false);
         }
     };
+
+    if (showUpgradeFlow || !profile.is_premium) {
+        return (
+            <div className="max-w-2xl mx-auto w-full">
+                <header className="flex justify-between items-start mb-8">
+                    <div className="text-left">
+                        <h1 className="text-3xl md:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[var(--accent-primary)] via-[var(--accent-secondary)] to-[var(--accent-primary)] font-display">
+                            VIP Access Only
+                        </h1>
+                        <p className="mt-2 text-[var(--text-secondary)]">Only Club Youniverse VIPs can upload music to the station.</p>
+                    </div>
+                    <button
+                        onClick={onBackToStudio}
+                        className="text-sm bg-gray-800 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors"
+                    >
+                        &larr; Back to Studio
+                    </button>
+                </header>
+
+                <PremiumUpgrade
+                    profile={profile}
+                    onUpgradeComplete={(updated) => {
+                        setProfile(updated);
+                        setShowUpgradeFlow(false);
+                    }}
+                    onCancel={onBackToStudio}
+                />
+            </div>
+        );
+    }
 
     const inputStyles = "w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-4 py-3 text-[var(--text-primary)] placeholder-[var(--text-secondary)] focus:ring-2 focus:ring-[var(--accent-primary)] focus:border-[var(--accent-primary)] outline-none";
 
@@ -108,7 +132,7 @@ export const SongSubmission: React.FC<SongSubmissionProps> = ({ onBackToStudio, 
                     <h1 className="text-3xl md:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[var(--accent-primary)] via-[var(--accent-secondary)] to-[var(--accent-primary)] font-display">
                         Submit a Song
                     </h1>
-                    <p className="mt-2 text-[var(--text-secondary)]">Get your music played on the station.</p>
+                    <p className="mt-2 text-[var(--text-secondary)]">VIP Station Access: Your music, our rotation.</p>
                 </div>
                 <button
                     onClick={onBackToStudio}
@@ -135,16 +159,6 @@ export const SongSubmission: React.FC<SongSubmissionProps> = ({ onBackToStudio, 
                         </div>
                     ) : (
                         <form onSubmit={handleSubmit} className="space-y-6">
-                            {isFirstTimeArtist && (
-                                <div className="bg-yellow-900/30 border border-yellow-500/50 p-4 rounded-lg mb-6">
-                                    <h3 className="text-yellow-400 font-bold mb-2">🌟 Artist Debut Required</h3>
-                                    <p className="text-sm text-gray-300 mb-4">
-                                        To upload your first song and become a verified Artist, we need a few more details.
-                                        This allows us to track your stats on the leaderboard and contact you for live events (like the Zero Star Roast).
-                                    </p>
-                                </div>
-                            )}
-
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
                                     <label htmlFor="title" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Song Title</label>
@@ -171,22 +185,6 @@ export const SongSubmission: React.FC<SongSubmissionProps> = ({ onBackToStudio, 
                                     />
                                 </div>
                             </div>
-
-                            {isFirstTimeArtist && (
-                                <div className="animate-fade-in">
-                                    <label htmlFor="phone" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Phone Number (Required for Artists)</label>
-                                    <input
-                                        id="phone"
-                                        type="tel"
-                                        placeholder="+1 (555) 000-0000"
-                                        value={phoneNumber}
-                                        onChange={(e) => setPhoneNumber(e.target.value)}
-                                        required
-                                        className={inputStyles}
-                                    />
-                                    <p className="text-xs text-gray-500 mt-1">Used for account verification and live DJ calls.</p>
-                                </div>
-                            )}
 
                             <div>
                                 <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Audio File</label>

@@ -7,7 +7,7 @@ import React, { useContext, useState, useEffect } from 'react';
 import { SectionCard } from './SectionCard';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { supabase } from '../services/supabaseClient';
-import { Loader } from './Loader';
+
 import { GalleryItemCard } from './GalleryItemCard';
 import type { Settings, ThemeName, View, Profile as ProfileType, GalleryItem, Session, Song } from '../types';
 
@@ -36,13 +36,13 @@ export const Profile: React.FC<ProfileProps> = ({ onNavigate, profile, session, 
         setLoading(true);
         setMessage('');
         setError('');
-        
+
         if (!supabase) {
             setError("Database connection is not available.");
             setLoading(false);
             return;
         }
-        
+
         const { error } = await supabase.from('profiles').update({ name }).eq('user_id', session.user.id);
 
         if (error) {
@@ -61,7 +61,7 @@ export const Profile: React.FC<ProfileProps> = ({ onNavigate, profile, session, 
         }
         // Auth state change in App.tsx will handle navigation
     };
-    
+
     const handleSettingsChange = (newSettings: Partial<Settings>) => {
         setSettings({ ...settings, ...newSettings });
     };
@@ -80,7 +80,7 @@ export const Profile: React.FC<ProfileProps> = ({ onNavigate, profile, session, 
                     </h1>
                     <p className="mt-2 text-[var(--text-secondary)]">Manage your creator identity and app preferences.</p>
                 </div>
-                <button 
+                <button
                     onClick={() => onNavigate('studio')}
                     className="text-sm bg-[var(--accent-secondary)] text-white font-bold py-2 px-4 rounded-lg hover:bg-[var(--accent-primary)] transition-colors"
                 >
@@ -101,7 +101,7 @@ export const Profile: React.FC<ProfileProps> = ({ onNavigate, profile, session, 
                             <div>
                                 <label htmlFor="artistName" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Artist Name</label>
                                 <input id="artistName" type="text" value={name} onChange={(e) => setName(e.target.value)} required className={inputStyles} />
-                                 {!profile.name && <p className="text-xs text-yellow-400 mt-1">Please set your artist name to continue.</p>}
+                                {!profile.name && <p className="text-xs text-yellow-400 mt-1">Please set your artist name to continue.</p>}
                             </div>
                             {message && <p className="text-green-400 text-sm">{message}</p>}
                             {error && <p className="text-red-400 text-sm">{error}</p>}
@@ -113,6 +113,44 @@ export const Profile: React.FC<ProfileProps> = ({ onNavigate, profile, session, 
                         <button onClick={handleSignOut} disabled={loading} className="w-full bg-gray-700 text-white font-bold py-3 px-6 rounded-lg hover:bg-gray-600 transition-colors">
                             Sign Out
                         </button>
+
+                        {/* Hidden Admin/Dev Tool for VIP Grant */}
+                        {session.user.email === 'itstraderbaby@gmail.com' && !profile.is_premium && (
+                            <div className="mt-4 border-t border-[var(--input-border)] pt-4">
+                                <p className="text-xs text-gray-500 mb-2">Dev Tools (Visible only to you)</p>
+                                <button
+                                    onClick={async () => {
+                                        setLoading(true);
+                                        // Force a fresh read first to maybe prime the cache
+                                        const { error: readError } = await supabase.from('profiles').select('*').eq('user_id', session.user.id).single();
+
+                                        if (readError) {
+                                            setError('Read Error: ' + readError.message);
+                                            setLoading(false);
+                                            return;
+                                        }
+
+                                        // Try update
+                                        const { error } = await supabase.from('profiles').update({ is_premium: true } as any).eq('user_id', session.user.id);
+
+                                        if (error) {
+                                            console.error("VIP Grant Error:", error);
+                                            if (error.message.includes("schema cache")) {
+                                                setError("Schema Error: The 'is_premium' column seems missing or the cache is stale. Please try refreshing the page. If it persists, check Supabase to ensure the 'is_premium' boolean column exists in the 'profiles' table.");
+                                            } else {
+                                                setError('Failed to grant VIP: ' + error.message);
+                                            }
+                                        } else {
+                                            setMessage('👑 VIP Granted! Please refresh the page.');
+                                        }
+                                        setLoading(false);
+                                    }}
+                                    className="w-full bg-gradient-to-r from-yellow-500 to-amber-600 text-white font-bold py-2 px-4 rounded-lg hover:from-yellow-400 hover:to-amber-500 text-sm"
+                                >
+                                    👑 Grant Myself VIP Access
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </SectionCard>
 
@@ -139,14 +177,14 @@ export const Profile: React.FC<ProfileProps> = ({ onNavigate, profile, session, 
                                     <option value="4:3">4:3 (Classic)</option>
                                 </select>
                             </div>
-                             <div>
+                            <div>
                                 <label htmlFor="styleKeywords" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Default Video Style Keywords</label>
-                                <input id="styleKeywords" type="text" value={settings.defaultStyleKeywords} onChange={(e) => handleSettingsChange({ defaultStyleKeywords: e.target.value })} className={inputStyles}/>
+                                <input id="styleKeywords" type="text" value={settings.defaultStyleKeywords} onChange={(e) => handleSettingsChange({ defaultStyleKeywords: e.target.value })} className={inputStyles} />
                             </div>
                             <p className="mt-4 text-center text-xs text-gray-500">
                                 View our{' '}
                                 <button onClick={onShowPrivacy} className="underline hover:text-yellow-400">
-                                Privacy Policy
+                                    Privacy Policy
                                 </button>.
                             </p>
                         </div>

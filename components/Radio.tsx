@@ -7,13 +7,14 @@
 
 import React, { useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
-import { updateSong } from '../services/supabaseSongService';
+import { updateSong, getProfile } from '../services/supabaseSongService';
 import type { View, Song, Profile } from '../types';
 import { RadioContext } from '../contexts/AudioPlayerContext';
 import { getCurrentDj } from '../logic/djRoster';
 import { LiveChat } from './LiveChat';
 import { Loader } from './Loader';
 import { Header } from './Header';
+import { RoastCallOverlay } from './RoastCallOverlay';
 import { DjBooth } from './DjBooth';
 import { TheBox } from './TheBox';
 import { StarRating } from './StarRating';
@@ -21,7 +22,7 @@ import { StarRating } from './StarRating';
 
 interface RadioProps {
     onNavigate: (view: View) => void;
-    songs: Song[];
+    songs?: Song[]; // Optional now, will fetch on demand
     profile: Profile | null;
     setProfile: React.Dispatch<React.SetStateAction<Profile | null>>;
 }
@@ -33,6 +34,9 @@ const DEBUT_RATING_SURVIVAL_THRESHOLD = 5;
 
 
 export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setProfile }) => {
+    // State for the "Live Roast Call" UI
+    const [roastCall, setRoastCall] = useState<{ artistName: string, phoneNumber?: string, status: 'dialing' | 'active' | 'ended' } | null>(null);
+
     // Access global radio state from the context.
     const {
         radioState, setRadioState,
@@ -44,23 +48,41 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
         isTtsErrorMuted,
         currentDj, setCurrentDj,
         liveRatings, clearLiveRatings,
-        boxUpdateTrigger, seekTo,
-        songEndedTrigger
+        songEndedTrigger,
+        isLeader
     } = useContext(RadioContext);
 
     // Local state for managing the radio simulation.
     const [isLoading, setIsLoading] = useState(true);
     const [isChatVisible, setIsChatVisible] = useState(true);
     const [showTtsErrorBanner, setShowTtsErrorBanner] = useState(true);
-    // The pool of available songs, synced with props from App.tsx.
-    const [songPool, setSongPool] = useState<Song[]>(songs);
+    const [isPoolEmpty, setIsPoolEmpty] = useState(false);
     const [userHasVoted, setUserHasVoted] = useState(false);
     const prevSongsRef = useRef<Song[]>([]);
     const lastDjRef = useRef<string>(currentDj.name);
 
-    // Refs for startNextRound recursion fix
     const lastRoundStartRef = useRef(0);
     const startNextRoundRef = useRef<() => void>(() => { });
+
+    // Autoplay blocked state
+    const [isAutoplayBlocked, setIsAutoplayBlocked] = useState(false);
+
+    // Safety timeout for initialization
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (isLoading) {
+                console.warn("⚠️ Radio init timed out. Forcing load to enable backup protocol.");
+                setIsLoading(false);
+            }
+        }, 10000); // 10 seconds max wait
+        return () => clearTimeout(timer);
+    }, [isLoading]);
+
+    // Autoplay blocked state (managed by GlobalManager? For now keeping local UI state if needed, or remove)
+    // The GlobalBroadcastManager handles the actual play(), but we might want to know if it failed.
+    // Ideally we subscribe to 'playbackStateChanged' or similar.
+    // For now, let's trust the Context/Manager to handle this.
+    // Removing the redundant effect that fights with the manager.
 
 
     // Effect to check for DJ shift changes periodically.
@@ -69,7 +91,7 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
             const newDj = getCurrentDj();
             // If the DJ has changed since the last check, update the state.
             if (newDj.name !== lastDjRef.current) {
-                console.log(`DJ Shift Change: ${lastDjRef.current} -> ${newDj.name}`);
+                // console.log(`DJ Shift Change: ${lastDjRef.current} -> ${newDj.name}`);
                 // Announce the shift change on air.
                 addDjQueueItem('dj_shift_change', { context: { oldDj: lastDjRef.current, newDj: newDj.name } });
                 setCurrentDj(newDj);
@@ -81,15 +103,41 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
     }, [setCurrentDj, addDjQueueItem]);
 
 
-    // Effect to sync the internal song pool with the main song library from props.
+    // Effect to check if the station should be considered "offline" (no songs in pool).
     useEffect(() => {
-        setSongPool(songs);
-    }, [songs]);
+        const checkPool = async () => {
+            const { count, error } = await supabase
+                .from('songs')
+                .select('*', { count: 'exact', head: true })
+                .eq('status', 'pool');
+
+            if (!error && count !== null) {
+                setIsPoolEmpty(count === 0);
+            }
+            setIsLoading(false);
+        };
+        checkPool();
+    }, []);
+
+    useEffect(() => {
+        // Only auto-start if:
+        // 1. We are the leader (Only leader orchestrates)
+        // 2. We have songs in the pool
+        // 3. Nothing is currently playing
+        // 4. We're not loading
+        // 5. We're in the initial DJ_BANTER_INTRO state (means radio hasn't started yet)
+        if (isLeader && !isPoolEmpty && !nowPlaying && !isLoading && radioState === 'DJ_BANTER_INTRO') {
+            console.log(`🚀 AUTO-START (Leader): Starting radio...`);
+            setTimeout(() => {
+                startNextRoundRef.current();
+            }, 2000); // 2 second delay to let everything settle
+        }
+    }, [isPoolEmpty, nowPlaying, isLoading, radioState, isLeader]);
 
 
     // Effect to detect a new song submission and check if it qualifies for a priority debut.
     useEffect(() => {
-        if (songs.length > prevSongsRef.current.length) {
+        if (songs && songs.length > prevSongsRef.current.length) {
             const newSong = songs[songs.length - 1];
             if (newSong && profile) {
                 const userSongCount = songs.filter(s => s.uploaderId === profile.user_id).length;
@@ -104,13 +152,37 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
                 }
 
                 if (isPriority) {
-                    console.log(`New Artist Debut: "${newSong.title}" by ${profile.name} is being prioritized.`);
                     setPrioritySong({ ...newSong, status: 'debut' });
                 }
             }
+            prevSongsRef.current = songs;
         }
-        prevSongsRef.current = songs;
     }, [songs, profile, setPrioritySong]);
+
+    // RECOVERY EFFECT: If we are in BOX_VOTING but have no candidates, fetch them.
+    useEffect(() => {
+        if (radioState === 'BOX_VOTING' && !boxRound && !isLoading) {
+            console.log("♻️ BOX_VOTING detected without candidates. Recovering from DB...");
+            const recoverBox = async () => {
+                const { data } = await supabase
+                    .from('songs')
+                    .select('*')
+                    .eq('status', 'in_box')
+                    .limit(3);
+
+                if (data && data.length > 0) {
+                    setBoxRound({
+                        id: `recovered-${Date.now()}`,
+                        candidates: data as Song[],
+                        startedAt: new Date().toISOString()
+                    });
+                } else {
+                    console.warn("⚠️ No 'in_box' songs found to recover.");
+                }
+            };
+            recoverBox();
+        }
+    }, [radioState, boxRound, isLoading, setBoxRound]);
 
 
     // When TTS gets muted by an error, make sure the banner is available to be shown.
@@ -136,53 +208,78 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
     }, [addDjQueueItem, profile?.name]);
 
     /**
-     * Selects candidate songs for the next round from the song pool.
-     * Ensures we always return the requested count, even if we have to recycle songs (for small pools).
+     * Selects candidate songs for the next round.
+     * Fetches from Supabase directly to stay efficient.
      */
-    const selectNextCandidates = useCallback((currentPool: Song[], count: number = 3): Song[] => {
-        let availableSongs = currentPool.filter(s => s.status === 'pool' && s.id !== nowPlaying?.id);
+    const selectNextCandidates = useCallback(async (count: number = 3, excludeIds: string[] = []): Promise<Song[]> => {
+        console.log(`🔍 Selecting ${count} candidates from DB (excluding ${excludeIds.length})...`);
 
-        // If we don't have enough unique songs, include 'graveyard' or even 'in_box' songs to fill the spots.
-        // This is critical for small pools (like the backup pool).
-        if (availableSongs.length < count) {
-            const otherSongs = currentPool.filter(s => s.id !== nowPlaying?.id && !availableSongs.includes(s));
-            availableSongs = [...availableSongs, ...otherSongs];
+        let query = supabase
+            .from('songs')
+            .select('*')
+            .eq('status', 'pool');
+
+        if (excludeIds.length > 0) {
+            query = query.not('id', 'in', `(${excludeIds.join(',')})`);
         }
 
-        // If we STILL don't have enough, duplicate them.
-        while (availableSongs.length < count && availableSongs.length > 0) {
-            availableSongs = [...availableSongs, ...availableSongs];
+        const { data, error } = await query.limit(20);
+
+        if (error || !data || data.length === 0) {
+            console.warn("⚠️ Pool empty or error, falling back to all songs");
+            const { data: fallbackData } = await supabase
+                .from('songs')
+                .select('*')
+                .limit(20);
+            return (fallbackData || []).sort(() => 0.5 - Math.random()).slice(0, count).map(s => (s as any));
         }
 
-        availableSongs.sort(() => 0.5 - Math.random()); // Simple random shuffle.
-        return availableSongs.slice(0, count);
+        // Shuffle and take requested count
+        return data.sort(() => 0.5 - Math.random()).slice(0, count).map(s => (s as any));
     }, [nowPlaying?.id]);
+
+    /**
+     * Ends the current voting round, selects a winner, and transitions to playing it.
+     */
+    const endVotingRound = useCallback(async () => {
+        if (!isLeader) return;
+        if (!boxRound) return;
+
+        // Determine the winner based on vote counts.
+        const winner = [...boxRound.candidates].sort((a, b) => (voteCounts[b.id] || 0) - (voteCounts[a.id] || 0))[0];
+
+        await addDjQueueItem('winner_announcement', { song: { title: winner.title, artistName: winner.artistName } });
+
+        setNowPlaying(winner);
+        setRadioState('NOW_PLAYING');
+
+        // Update the winner in the DB is enough; we don't need a local monolithic pool update.
+        await updateSong(winner.id, {
+            stars: Math.min(10, (winner.stars || 0) + 1),
+            status: 'now_playing',
+            playCount: (winner.playCount || 0) + 1,
+            lastPlayedAt: new Date().toISOString()
+        });
+
+        setVoteCounts({});
+    }, [boxRound, voteCounts, addDjQueueItem, setNowPlaying, setRadioState]);
 
     /**
      * Starts the next round of voting by selecting candidates and setting up the state.
      * Called when a song ends or when manually triggered.
      */
     const startNextRound = useCallback(async () => {
+        if (!isLeader) return;
         // Debounce: Prevent starting a new round too quickly (e.g. < 2 seconds)
         if (Date.now() - lastRoundStartRef.current < 2000) {
-            console.warn("⏳ startNextRound debounced.");
             return;
         }
         lastRoundStartRef.current = Date.now();
 
-        console.log('🔄 startNextRound called', {
-            nowPlaying: nowPlaying?.title,
-            songPoolLength: songPool.length,
-            prioritySong: prioritySong?.title,
-            radioState
-        });
-
         // Priority song handling (e.g., debut song gets immediate play)
         if (prioritySong) {
-            console.log('🎯 Priority song detected:', prioritySong.title);
             setNowPlaying(prioritySong);
             setRadioState('NOW_PLAYING');
-            setSongPool(pool => pool.map(s => s.id === prioritySong.id ? { ...s, status: 'debut' } : s));
             updateSong(prioritySong.id, { status: 'debut' });
             await addDjQueueItem('new_artist_shoutout', { song: { title: prioritySong.title, artistName: prioritySong.artistName } });
             setPrioritySong(null); // Clear the queue after use.
@@ -192,323 +289,80 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
         // Before selecting new candidates, penalize the losers from the last round.
         if (boxRound) {
             const unchosen = boxRound.candidates.filter(c => c.id !== nowPlaying?.id);
-            setSongPool(currentPool => currentPool.map(song => {
-                const unchosenSong = unchosen.find(u => u.id === song.id);
-                if (unchosenSong) {
-                    // Immediate -1 star penalty for losers
-                    const newStars = Math.max(0, song.stars - 1);
-                    // PERSIST: Update DB
-                    updateSong(song.id, { stars: newStars, status: 'pool' });
-                    return { ...song, status: 'pool', stars: newStars };
-                }
-                return song;
-            }));
-        }
+            for (const song of unchosen) {
+                // Immediate -1 star penalty for losers
+                const newStars = Math.max(0, (song.stars || 0) - 1);
+                // Increment box loss count
+                const newLosses = (song.boxRoundsLost || 0) + 1;
 
-        // Determine how many songs we need.
-        // If nothing is playing, we need 1 for Now Playing + 3 for The Box = 4.
-        // If something is playing, we just need 3 for The Box.
-        const songsNeeded = nowPlaying ? 3 : 4;
-        const candidates = selectNextCandidates(songPool, songsNeeded);
-
-        console.log(`🎵 Selecting candidates. Needed: ${songsNeeded}, Found: ${candidates.length}`);
-
-        // Case 0: No songs available at all
-        if (candidates.length === 0) {
-            console.warn("⚠️ No candidates found! Pool size:", songPool.length);
-
-            // If the pool is not empty but we found no candidates, it means all songs are 'graveyard' or stuck.
-            // We should try to find ANY song to play to avoid silence.
-            const graveyardSongs = songPool.filter(s => s.status === 'graveyard');
-            if (graveyardSongs.length > 0) {
-                console.log("👻 Only graveyard songs found. Resurrecting one for the show...");
-                const zombie = graveyardSongs[Math.floor(Math.random() * graveyardSongs.length)];
-                setNowPlaying(zombie);
-                setRadioState('NOW_PLAYING');
-                updateSong(zombie.id, { status: 'now_playing', stars: 5 }); // Give it a second chance?
-                return;
+                // PERSIST: Update DB
+                await updateSong(song.id, { stars: newStars, status: 'pool', boxRoundsLost: newLosses });
             }
-
-            await addDjQueueItem('empty_queue_banter');
-            setRadioState('DJ_TALKING');
-            // Try again in 5 seconds - use ref to break cycle
-            setTimeout(() => startNextRoundRef.current(), 5000);
-            return;
         }
 
-        let nextNowPlaying = nowPlaying;
+        // Sticky Box Logic:
+        // We preserve the survivors from the previous round and only fetch a replacement for the winner.
         let boxCandidates: Song[] = [];
 
         if (!nowPlaying) {
-            // We need to pick a song to play immediately.
-            nextNowPlaying = candidates[0];
-            // Force max 3 candidates for The Box
-            boxCandidates = candidates.slice(1, 4);
+            // Cold start: fetch 4 songs (1 for play, 3 for box)
+            const initialSongs = await selectNextCandidates(4);
+            if (initialSongs.length > 0) {
+                const nextNowPlaying = initialSongs[0];
+                boxCandidates = initialSongs.slice(1, 4);
 
-            console.log('🎵 No song playing - starting first candidate:', nextNowPlaying.title);
-            setNowPlaying(nextNowPlaying);
-            setRadioState('NOW_PLAYING');
-
-            // Update the playing song in pool
-            setSongPool(pool => pool.map(s => s.id === nextNowPlaying!.id ? { ...s, status: 'now_playing' } : s));
-            updateSong(nextNowPlaying.id, { status: 'now_playing', lastPlayedAt: new Date().toISOString() });
+                setNowPlaying(nextNowPlaying);
+                setRadioState('NOW_PLAYING');
+                await updateSong(nextNowPlaying.id, { status: 'now_playing', lastPlayedAt: new Date().toISOString() });
+            }
         } else {
-            // Force max 3 candidates for The Box
-            boxCandidates = candidates.slice(0, 3);
+            // Round transition: current nowPlaying is the winner of the PREVIOUS box.
+            // Other candidates from that box SURVIVE and stay in the box.
+            const survivors = boxRound ? boxRound.candidates.filter(c => c.id !== nowPlaying.id) : [];
+
+            // We need to fetch enough to make the box have 3 candidates
+            const neededForBox = 3 - survivors.length;
+            const excludeIds = [nowPlaying.id, ...survivors.map(s => s.id)];
+
+            console.log(`♻️ Sticky Box: ${survivors.length} survivors, fetching ${neededForBox} fresh...`);
+            const freshSongs = await selectNextCandidates(neededForBox, excludeIds);
+            boxCandidates = [...survivors, ...freshSongs];
         }
 
-        // Ensure we have exactly 3 candidates for The Box if possible, or at least some.
         if (boxCandidates.length > 0) {
             setBoxRound({ id: `round-${Date.now()}`, candidates: boxCandidates, startedAt: new Date().toISOString() });
-            setSongPool(pool => pool.map(s => boxCandidates.some(c => c.id === s.id) ? { ...s, status: 'in_box' } : s));
+
+            // PERSIST: Update status AND Box Appearance Count
+            for (const cand of boxCandidates) {
+                const newAppearanceCount = (cand.boxAppearanceCount || 0) + 1;
+                await updateSong(cand.id, {
+                    status: 'in_box',
+                    boxAppearanceCount: newAppearanceCount
+                });
+            }
+
             setVoteCounts({});
-            console.log("🔄 Resetting userHasVoted to false for new round");
             setUserHasVoted(false);
             setRadioState('BOX_VOTING');
 
-            // Only announce if we actually have a full box or it's a new round
             const context = `The Gauntlet is set. ${boxCandidates.length} tracks enter... one gets played.`;
-            addDjQueueItem('new_box_round', { context }); // Don't await
+            addDjQueueItem('new_box_round', { context });
         } else {
-            // Not enough songs for a box round?
-            setBoxRound(null);
-            // Maybe just play music if we have a nowPlaying, otherwise silence.
+            await addDjQueueItem('empty_queue_banter');
+            setRadioState('DJ_TALKING');
+            setTimeout(() => startNextRoundRef.current(), 5000);
         }
+    }, [isLeader, boxRound, nowPlaying, selectNextCandidates, setNowPlaying, setRadioState, addDjQueueItem, setBoxRound, setVoteCounts, setUserHasVoted, prioritySong, setPrioritySong, updateSong]);
 
-    }, [songPool, prioritySong, selectNextCandidates, addDjQueueItem, setNowPlaying, setRadioState, setBoxRound, setVoteCounts, setPrioritySong, boxRound, nowPlaying]);
-
-    // Update the ref whenever startNextRound changes
+    // Update ref whenever the function changes so we can call it from timeouts/effects
     useEffect(() => {
         startNextRoundRef.current = startNextRound;
     }, [startNextRound]);
 
-    // Effect to restore the broadcast state from the database on initial load.
-    // This ensures all users tune in to the same song at the same time.
+
+
     useEffect(() => {
-        console.log("📻 Radio: Init Effect running", { isLoading, poolSize: songPool.length });
-
-        // EMERGENCY FALLBACK: If DB is empty/blocked AND we're not currently loading, use hardcoded songs.
-        // Important: Only use backup if !isLoading to avoid race condition with Supabase fetch.
-        if (songPool.length === 0 && !isLoading) {
-            console.warn("⚠️ Radio: Song pool is empty after load complete. Engaging EMERGENCY BACKUP PROTOCOL.");
-
-            const backupSongs: Song[] = [
-                {
-                    id: 'backup-1',
-                    title: 'System Offline (Backup)',
-                    artistName: 'Emergency Broadcast',
-                    audioUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-                    coverArtUrl: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=400',
-                    durationSec: 372,
-                    uploaderId: 'system',
-                    status: 'pool',
-                    stars: 5,
-                    createdAt: new Date().toISOString(),
-                    playCount: 0,
-                    upvotes: 0,
-                    downvotes: 0,
-                    boxAppearanceCount: 0,
-                    boxRoundsLost: 0,
-                    boxRoundsSeen: 0,
-                    source: 'upload',
-                    lastPlayedAt: new Date().toISOString()
-                },
-                {
-                    id: 'backup-2',
-                    title: 'Connection Lost (Backup)',
-                    artistName: 'The Glitch',
-                    audioUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
-                    coverArtUrl: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=400',
-                    durationSec: 425,
-                    uploaderId: 'system',
-                    status: 'pool',
-                    stars: 5,
-                    createdAt: new Date().toISOString(),
-                    playCount: 0,
-                    upvotes: 0,
-                    downvotes: 0,
-                    boxAppearanceCount: 0,
-                    boxRoundsLost: 0,
-                    boxRoundsSeen: 0,
-                    source: 'upload',
-                    lastPlayedAt: new Date().toISOString()
-                },
-                {
-                    id: 'backup-3',
-                    title: 'Rebooting... (Backup)',
-                    artistName: 'System Admin',
-                    audioUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
-                    coverArtUrl: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=400',
-                    durationSec: 340,
-                    uploaderId: 'system',
-                    status: 'pool',
-                    stars: 5,
-                    createdAt: new Date().toISOString(),
-                    playCount: 0,
-                    upvotes: 0,
-                    downvotes: 0,
-                    boxAppearanceCount: 0,
-                    boxRoundsLost: 0,
-                    boxRoundsSeen: 0,
-                    source: 'upload',
-                    lastPlayedAt: new Date().toISOString()
-                }
-            ];
-
-            setSongPool(backupSongs);
-            setIsLoading(false);
-            // We'll let the next render cycle pick these up and startNextRound
-            return;
-        }
-
-        // Once we have songs, we proceed to check broadcast state.
-        if (isLoading) {
-            console.log("📻 Radio: Tuning in to broadcast... Pool size:", songPool.length);
-
-            // 1. Find the currently playing song in the DB (which is now in songPool)
-            const currentBroadcast = songPool.find(s => s.status === 'now_playing');
-
-            if (currentBroadcast && currentBroadcast.lastPlayedAt) {
-                const lastPlayed = new Date(currentBroadcast.lastPlayedAt).getTime();
-                const now = Date.now();
-                const elapsedSec = (now - lastPlayed) / 1000;
-
-                console.log(`Found broadcast: "${currentBroadcast.title}" (Elapsed: ${elapsedSec.toFixed(1)}s / Duration: ${currentBroadcast.durationSec}s)`);
-
-                if (elapsedSec < currentBroadcast.durationSec) {
-                    // Song is still valid! Join the broadcast.
-                    // Pass the elapsed time directly to start immediately at the right spot
-                    setNowPlaying(currentBroadcast, elapsedSec);
-                    setRadioState('NOW_PLAYING');
-
-                    // Restore The Box state
-                    const boxCandidates = songPool.filter(s => s.status === 'in_box');
-                    if (boxCandidates.length > 0) {
-                        setBoxRound({
-                            id: `round-${lastPlayed}`,
-                            candidates: boxCandidates,
-                            startedAt: currentBroadcast.lastPlayedAt
-                        });
-                        setRadioState('BOX_VOTING');
-                        setUserHasVoted(false);
-                    }
-
-                    setIsLoading(false);
-                    return;
-                } else {
-                    console.log(`⚠️ Broadcast expired. Elapsed: ${elapsedSec.toFixed(1)}s > Duration: ${currentBroadcast.durationSec}s`);
-                }
-            } else {
-                console.log("ℹ️ No active broadcast found in DB.");
-            }
-
-            // If we reach here, there is no valid broadcast (either none found or expired).
-            // We must CLEAN UP any "zombie" states (songs stuck in 'now_playing' or 'in_box')
-            // so they become available for the new round.
-
-            console.log("🧹 Cleaning up zombie states and starting fresh...");
-
-            const zombies = songPool.filter(s => s.status === 'now_playing' || s.status === 'in_box');
-
-            if (zombies.length > 0) {
-                console.log(`Found ${zombies.length} zombies. Resetting to pool.`);
-
-                // 1. Update local state immediately so startNextRound sees them
-                const cleanPool = songPool.map(s =>
-                    (s.status === 'now_playing' || s.status === 'in_box')
-                        ? { ...s, status: 'pool' } as Song
-                        : s
-                );
-                setSongPool(cleanPool);
-
-                // 2. Persist cleanup to DB
-                zombies.forEach(z => {
-                    updateSong(z.id, { status: 'pool' });
-                });
-
-                setIsLoading(false);
-                // The new "Auto-Start" effect will detect the updated songPool and trigger startNextRound automatically.
-
-            } else {
-                // No zombies, just start.
-                setIsLoading(false);
-                // For the empty case, we still call it manually to trigger the "Empty Pool" banter.
-                startNextRound();
-            }
-        }
-    }, [isLoading, songPool, startNextRound, seekTo, setNowPlaying, setRadioState, setBoxRound]);
-
-    // Effect to handle external triggers for new box rounds (e.g. from DJ Booth)
-    useEffect(() => {
-        if (boxUpdateTrigger > 0) {
-            console.log("⚡ Box update triggered externally");
-            startNextRound();
-        }
-    }, [boxUpdateTrigger, startNextRound]);
-
-    // Effect to kick-start the radio when valid songs are available and the radio is idle.
-    useEffect(() => {
-        const availableSongs = songPool.filter(s => s.status === 'pool');
-        const hasAvailableSongs = availableSongs.length > 0;
-        // We are "idle" if nothing is playing, we aren't voting, and we aren't loading.
-        // We also check if we have a "now_playing" song in the pool that just isn't set in state yet (which shouldn't happen due to restoreBroadcastState, but good for safety).
-        const isIdle = !nowPlaying && radioState !== 'BOX_VOTING' && !isLoading;
-
-        // If we are idle and have songs to play, START THE ENGINE.
-        if (isIdle && hasAvailableSongs) {
-            console.log("🚀 Radio is idle with available songs. Auto-starting next round.");
-            startNextRound();
-        }
-    }, [songPool, nowPlaying, radioState, isLoading, startNextRound]);
-
-
-    /**
-     * Ends the current voting round, determines the winner, updates song stats,
-     * and sets up the next round.
-     */
-    const endVotingRound = useCallback(async () => {
-        console.log('🏁 endVotingRound called!', { boxRound, radioState, voteCounts });
-        if (!boxRound || radioState !== 'BOX_VOTING') {
-            console.log('⚠️ Early return - no box round or wrong state');
-            return;
-        }
-
-        // Determine the winner based on vote counts.
-        const winner = [...boxRound.candidates].sort((a, b) => (voteCounts[b.id] || 0) - (voteCounts[a.id] || 0))[0];
-        console.log('🏆 Winner selected:', winner.title, 'with', voteCounts[winner.id] || 0, 'votes');
-
-        await addDjQueueItem('winner_announcement', { song: { title: winner.title, artistName: winner.artistName } });
-
-        console.log('▶️ Setting now playing:', winner.title);
-        setNowPlaying(winner);
-        setRadioState('NOW_PLAYING');
-
-        // Update the song pool with new stats for the winner.
-        setSongPool(currentPool => currentPool.map((song): Song => {
-            if (song.id === winner.id) {
-                const newStars = Math.min(10, song.stars + 1);
-                const newPlayCount = song.playCount + 1;
-                // PERSIST: Update DB
-                updateSong(song.id, {
-                    stars: newStars,
-                    status: 'now_playing',
-                    playCount: newPlayCount,
-                    lastPlayedAt: new Date().toISOString()
-                });
-                return { ...song, stars: newStars, status: 'now_playing', playCount: newPlayCount };
-            }
-            return song;
-        }));
-
-        setVoteCounts({});
-
-    }, [boxRound, voteCounts, addDjQueueItem, setNowPlaying, setRadioState, setVoteCounts, radioState]);
-
-
-
-    // Effect for simulating listener votes during song playback
-    useEffect(() => {
-        if (radioState !== 'BOX_VOTING' || !boxRound) return;
+        if (!isLeader || radioState !== 'BOX_VOTING' || !boxRound) return;
 
         // Simulated votes happen continuously while Box is active
         const voteInterval = setInterval(() => {
@@ -527,12 +381,11 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
         };
     }, [radioState, boxRound, setVoteCounts]);
 
-    // Effect for handling the end of a song and transitioning to the next round.
-    // Replaces the unreliable setTimeout with a robust event trigger from the AudioContext.
     useEffect(() => {
         if (songEndedTrigger === 0 || !nowPlaying) return;
+        if (!isLeader) return;
 
-        console.log("🎵 Song ended event received via trigger:", songEndedTrigger);
+        console.log("🎵 Song ended event received (Leader logic):", songEndedTrigger);
 
         const handleSongEnd = async () => {
             const endedSong = nowPlaying;
@@ -546,7 +399,6 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
 
                 if (finalRating < DEBUT_RATING_SURVIVAL_THRESHOLD) {
                     // Instant Graveyard
-                    setSongPool(pool => pool.map(s => s.id === endedSong.id ? { ...s, status: 'graveyard', stars: finalRating } : s));
                     // PERSIST: Graveyard
                     updateSong(endedSong.id, { status: 'graveyard', stars: finalRating });
 
@@ -558,7 +410,6 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
                     }
                 } else {
                     // Survived! Enter the pool.
-                    setSongPool(pool => pool.map(s => s.id === endedSong.id ? { ...s, status: 'pool', stars: finalRating } : s));
                     // PERSIST: Survival
                     updateSong(endedSong.id, { status: 'pool', stars: finalRating });
 
@@ -573,13 +424,15 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
             } else {
                 // --- REGULAR SONG LOGIC ---
                 // Return song to pool
-                setSongPool(pool => pool.map((s): Song => s.id === endedSong.id ? { ...s, status: 'pool' } : s));
                 // PERSIST: Return to Pool
                 updateSong(endedSong.id, { status: 'pool' });
 
                 await addDjQueueItem('outro', { song: { title: endedSong.title, artistName: endedSong.artistName } });
-                if (Math.random() < 0.3) {
+                const rand = Math.random();
+                if (rand < 0.2) {
                     await addDjQueueItem('premium_cta');
+                } else if (rand < 0.4) {
+                    await addDjQueueItem('system_explainer');
                 }
             }
 
@@ -602,10 +455,12 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
     /**
      * Handles a user's vote for a specific song in The Box.
      */
-    const handleUserVote = useCallback((songId: string) => {
+    const handleUserVote = useCallback(async (songId: string) => {
         if (!boxRound || userHasVoted) return;
 
-        // Optimistic update
+        // console.log(`🗳️ User voted for song: ${songId}`);
+
+        // Optimistic update local state
         setVoteCounts(prev => ({
             ...prev,
             [songId]: (prev[songId] || 0) + 1
@@ -613,10 +468,56 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
 
         setUserHasVoted(true);
 
-        // In a real app, we would send this to the backend.
-        // For now, we just track it locally for the session.
-        console.log(`🗳️ Voted for song: ${songId}`);
+        // PERSIST: Update the song's upvote count in the database
+        // We find the song in the candidates to get current upvotes, then increment
+        const song = boxRound.candidates.find(c => c.id === songId);
+        if (song) {
+            const newUpvotes = (song.upvotes || 0) + 1;
+            await updateSong(songId, { upvotes: newUpvotes });
+            console.log(`✅ Persisted vote for "${song.title}": ${newUpvotes} upvotes`);
+        }
     }, [boxRound, userHasVoted, setVoteCounts, setUserHasVoted]);
+
+    /**
+     * Handles the structured sequence for a "Live Roast Call".
+     * Dialing -> Active -> Ended -> Cleanup.
+     */
+    const initiateRoastCall = useCallback(async (artistId: string, artistName: string) => {
+        try {
+            const artistProfile = await getProfile(artistId);
+
+            // Logic: If artist is VIP and consented, trigger the call.
+            if (artistProfile && artistProfile.is_premium && artistProfile.roast_consent) {
+                console.log("📞 Initiating Live Roast Call for", artistName);
+
+                // 1. Dialing
+                setRoastCall({
+                    artistName,
+                    phoneNumber: artistProfile.phone_number,
+                    status: 'dialing'
+                });
+
+                // 2. Wait 2.5s for "dialing" effect
+                await new Promise(r => setTimeout(r, 2500));
+
+                // 3. Active Call
+                setRoastCall(prev => prev ? { ...prev, status: 'active' } : null);
+
+                // 4. Stay active for 8s (time for the DJ line to play)
+                await new Promise(r => setTimeout(r, 8000));
+
+                // 5. End Call
+                setRoastCall(prev => prev ? { ...prev, status: 'ended' } : null);
+
+                // 6. Brief pause then cleanup
+                await new Promise(r => setTimeout(r, 2000));
+                setRoastCall(null);
+            }
+        } catch (err) {
+            console.error("Failed to initiate roast call:", err);
+            setRoastCall(null);
+        }
+    }, []);
 
     /**
      * Handles star rating updates for the currently playing song.
@@ -627,30 +528,19 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
 
         console.log(`⭐ Rating updated for ${nowPlaying.title}: ${newRating}`);
 
-        // Update local state immediately
-        // CRITICAL FIX: Pass the current audio time to prevent restarting the song!
-        // We can't easily get the exact time from here without context ref, 
-        // BUT we can update the song object in the pool without calling setNowPlaying if it's just a metadata update.
-        // Actually, setNowPlaying triggers the audio effect which resets src.
-        // We should probably separate "Playback State" from "Song Metadata State" in the context,
-        // OR make the audio effect smart enough not to reset if ID hasn't changed.
-
-        // For now, let's just update the pool. The NowPlaying component reads from 'nowPlaying' context.
-        // If we don't update 'nowPlaying' context, the UI won't update.
-        // Let's try to update the context but tell it NOT to reset audio.
-        // We can do this by checking ID in the AudioContext effect.
-
-        // TEMPORARY FIX: Just update the pool and let the UI lag slightly? 
-        // No, UI needs to show the new stars.
-
-        // Better Fix: Update AudioPlayerContext to check if song ID changed before resetting audio.
-        setNowPlaying({ ...nowPlaying, stars: newRating }, -1); // -1 signal to NOT reset audio?
-        setSongPool(pool => pool.map(s => s.id === nowPlaying.id ? { ...s, stars: newRating } : s));
+        // Update local state immediately.
+        setNowPlaying({ ...nowPlaying, stars: newRating }, -1);
 
         // Check for Graveyard condition
         if (newRating <= 0) {
             console.log("🪦 Song died! Sending to Graveyard...");
-            await addDjQueueItem('filler', { context: `RIP ${nowPlaying.title}. The people have spoken.` });
+
+            // Trigger the "Live Roast Call" UI sequence if applicable
+            initiateRoastCall(nowPlaying.uploaderId, nowPlaying.artistName);
+
+            await addDjQueueItem('graveyard_roast', {
+                song: { title: nowPlaying.title, artistName: nowPlaying.artistName }
+            });
 
             // Update DB
             updateSong(nowPlaying.id, { stars: 0, status: 'graveyard' });
@@ -658,7 +548,7 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
             // Just update stars
             updateSong(nowPlaying.id, { stars: newRating });
         }
-    }, [nowPlaying, setNowPlaying, setSongPool, addDjQueueItem]);
+    }, [nowPlaying, setNowPlaying, addDjQueueItem, initiateRoastCall]);
 
     const isStandby = !nowPlaying && radioState !== 'BOX_VOTING' && !isLoading;
 
@@ -679,6 +569,23 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
                 </div>
             )}
 
+            {/* Click to Start Overlay for Blocked Autoplay */}
+            {isAutoplayBlocked && !isLoading && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+                    <button
+                        onClick={() => {
+                            const { getBroadcastManager } = require('../services/globalBroadcastManager');
+                            getBroadcastManager().play();
+                            setIsAutoplayBlocked(false);
+                        }}
+                        className="bg-green-500 hover:bg-green-400 text-black font-bold py-4 px-8 rounded-full shadow-[0_0_30px_rgba(34,197,94,0.5)] transform hover:scale-105 transition-all flex items-center gap-3"
+                    >
+                        <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                        <span>TUNE IN NOW</span>
+                    </button>
+                </div>
+            )}
+
             {isLoading ? (
                 <div className="flex-grow flex items-center justify-center">
                     <Loader message="Tuning in..." />
@@ -688,7 +595,19 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
                     {/* EMPTY MAIN SCREEN AREA - for future visualizations */}
                     <div className="flex-grow relative">
                         {/* Future: Add visualizations, events, etc here */}
-                        {isStandby && (
+
+                        {/* Station Offline State */}
+                        {isPoolEmpty && !isLoading && (
+                            <div className="absolute inset-0 flex items-center justify-center p-4 text-center animate-fade-in pointer-events-auto z-50">
+                                <div className="bg-black/80 p-8 rounded-xl border border-red-500/30 backdrop-blur-md">
+                                    <h3 className="text-3xl font-display text-red-500 mb-2">STATION OFFLINE</h3>
+                                    <p className="text-lg text-gray-400">No signals detected in the Youniverse.</p>
+                                    <p className="text-sm text-gray-500 mt-4">Upload a song to jumpstart the broadcast.</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {isStandby && !isPoolEmpty && (
                             <div className="absolute inset-0 flex items-center justify-center p-4 text-center animate-fade-in pointer-events-none">
                                 <div>
                                     <h3 className="text-2xl font-display text-yellow-400">Stand By</h3>
@@ -699,57 +618,51 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
                     </div>
 
                     {/* 5 SMALL CARDS AT BOTTOM */}
-                    <div className="flex gap-4 mt-8 pb-4 justify-between px-12">
+                    <div className="flex gap-4 mt-8 pb-4 justify-between px-12 items-end">
                         {/* 1. DJ Booth - far left */}
-                        <div className="w-32 flex-shrink-0">
+                        <div className="w-80 flex-shrink-0">
                             <DjBooth profile={profile} />
                         </div>
 
                         {/* 2-4. The Box - 3 cards in the middle */}
                         {boxRound && boxRound.candidates.length > 0 && (
-                            <>
-                                {/* 4. The Box - center */}
-                                {boxRound && (
-                                    <TheBox
-                                        candidates={boxRound.candidates}
-                                        onVote={handleUserVote}
-                                        voteCounts={voteCounts}
-                                        userHasVoted={userHasVoted}
-                                        isVotingActive={radioState === 'BOX_VOTING'}
-                                    />
-                                )}
-
-                                {/* 5. Now Playing - far right */}
-                                {nowPlaying && (
-                                    <div className="w-32 flex-shrink-0 ml-auto group relative">
-                                        <div className="bg-gray-900/80 border border-green-500/30 rounded-lg p-2 h-full flex flex-col transition-all duration-300 hover:scale-105 hover:z-10 hover:shadow-[0_0_20px_rgba(34,197,94,0.3)]">
-                                            <div className="text-[10px] text-green-400 mb-1 font-bold tracking-wider">ON AIR</div>
-                                            <div className="relative w-full aspect-square rounded overflow-hidden mb-2">
-                                                <img src={nowPlaying.coverArtUrl} alt={nowPlaying.title} className="w-full h-full object-cover" />
-                                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-1">
-                                                    <span className="text-[8px] text-white">Click for Lyrics</span>
-                                                </div>
-                                            </div>
-
-                                            <h4 className="text-xs font-bold text-white truncate leading-tight">{nowPlaying.title}</h4>
-                                            <p className="text-[10px] text-gray-400 truncate mb-1">{nowPlaying.artistName}</p>
-
-                                            <div className="mt-auto pt-1 border-t border-gray-700/50">
-                                                <div className="flex justify-center scale-75 origin-center">
-                                                    <StarRating
-                                                        rating={nowPlaying.stars}
-                                                        onVote={handleStarVote}
-                                                        className="gap-0.5"
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                            </>
+                            <TheBox
+                                candidates={boxRound.candidates}
+                                onVote={handleUserVote}
+                                voteCounts={voteCounts}
+                                userHasVoted={userHasVoted}
+                                isVotingActive={radioState === 'BOX_VOTING'}
+                            />
                         )}
 
-                    </div> {/* Closes "5 SMALL CARDS AT BOTTOM" */}
+                        {/* 5. Now Playing - far right */}
+                        {nowPlaying && (
+                            <div className="w-44 flex-shrink-0 ml-auto group relative">
+                                <div className="bg-gray-900/80 border border-green-500/30 rounded-lg p-2 h-full flex flex-col transition-all duration-300 hover:scale-105 hover:z-10 hover:shadow-[0_0_20px_rgba(34,197,94,0.3)]">
+                                    <div className="text-[10px] text-green-400 mb-1 font-bold tracking-wider">ON AIR</div>
+                                    <div className="relative w-full aspect-square rounded overflow-hidden mb-2">
+                                        <img src={nowPlaying.coverArtUrl} alt={nowPlaying.title} className="w-full h-full object-cover" />
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-1">
+                                            <span className="text-[8px] text-white">Click for Lyrics</span>
+                                        </div>
+                                    </div>
+
+                                    <h4 className="text-xs font-bold text-white truncate leading-tight">{nowPlaying.title}</h4>
+                                    <p className="text-[10px] text-gray-400 truncate mb-1">{nowPlaying.artistName}</p>
+
+                                    <div className="mt-auto pt-1 border-t border-gray-700/50">
+                                        <div className="flex justify-center scale-75 origin-center">
+                                            <StarRating
+                                                rating={nowPlaying.stars}
+                                                onVote={handleStarVote}
+                                                className="gap-0.5"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
 
                     {/* Live Chat - Side Panel if visible */}
                     {isChatVisible && (
@@ -758,6 +671,15 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setPro
                         </div>
                     )}
                 </div>
+            )}
+
+            {/* Live Roast Call Ceremony */}
+            {roastCall && (
+                <RoastCallOverlay
+                    artistName={roastCall.artistName}
+                    phoneNumber={roastCall.phoneNumber}
+                    status={roastCall.status}
+                />
             )}
         </div>
     );
