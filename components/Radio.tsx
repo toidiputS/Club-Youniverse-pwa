@@ -5,26 +5,31 @@
  * (DJ scripts, news), and updating the global radio context.
  */
 
-import React, { useContext, useEffect, useState, useCallback, useRef } from 'react';
-import { supabase } from '../services/supabaseClient';
-import { updateSong, getProfile } from '../services/supabaseSongService';
-import type { View, Song, Profile } from '../types';
-import { RadioContext } from '../contexts/AudioPlayerContext';
-import { getCurrentDj } from '../logic/djRoster';
-import { LiveChat } from './LiveChat';
-import { Loader } from './Loader';
-import { Header } from './Header';
-import { RoastCallOverlay } from './RoastCallOverlay';
-import { DjBooth } from './DjBooth';
-import { TheBox } from './TheBox';
-import { StarRating } from './StarRating';
-
+import React, {
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+} from "react";
+import { supabase } from "../services/supabaseClient";
+import { updateSong, getProfile } from "../services/supabaseSongService";
+import type { View, Song, Profile } from "../types";
+import { RadioContext } from "../contexts/AudioPlayerContext";
+import { getCurrentDj } from "../logic/djRoster";
+import { LiveChat } from "./LiveChat";
+import { Loader } from "./Loader";
+import { Header } from "./Header";
+import { RoastCallOverlay } from "./RoastCallOverlay";
+import { DjBooth } from "./DjBooth";
+import { TheBox } from "./TheBox";
+import { StarRating } from "./StarRating";
 
 interface RadioProps {
-    onNavigate: (view: View) => void;
-    songs?: Song[]; // Optional now, will fetch on demand
-    profile: Profile | null;
-    setProfile: React.Dispatch<React.SetStateAction<Profile | null>>;
+  onNavigate: (view: View) => void;
+  songs?: Song[]; // Optional now, will fetch on demand
+  profile: Profile | null;
+  setProfile: React.Dispatch<React.SetStateAction<Profile | null>>;
 }
 
 // Constants for the radio simulation timing.
@@ -32,655 +37,948 @@ const POST_SONG_DELAY_MS = 5 * 1000;
 const DJ_SHIFT_CHECK_INTERVAL_MS = 60 * 1000; // Check for a shift change every minute
 const DEBUT_RATING_SURVIVAL_THRESHOLD = 5;
 
+export const Radio: React.FC<RadioProps> = ({
+  onNavigate,
+  songs,
+  profile,
+  setProfile,
+}) => {
+  // State for the "Live Roast Call" UI
+  const [roastCall, setRoastCall] = useState<{
+    artistName: string;
+    phoneNumber?: string;
+    status: "dialing" | "active" | "ended";
+  } | null>(null);
 
-export const Radio: React.FC<RadioProps> = ({ onNavigate, songs, profile, setProfile }) => {
-    // State for the "Live Roast Call" UI
-    const [roastCall, setRoastCall] = useState<{ artistName: string, phoneNumber?: string, status: 'dialing' | 'active' | 'ended' } | null>(null);
+  // Access global radio state from the context.
+  const {
+    radioState,
+    setRadioState,
+    boxRound,
+    setBoxRound,
+    setNowPlaying,
+    nowPlaying,
+    prioritySong,
+    setPrioritySong,
+    addDjQueueItem,
+    voteCounts,
+    setVoteCounts,
+    isTtsErrorMuted,
+    currentDj,
+    setCurrentDj,
+    liveRatings,
+    clearLiveRatings,
+    songEndedTrigger,
+    isLeader,
+  } = useContext(RadioContext);
 
-    // Access global radio state from the context.
-    const {
-        radioState, setRadioState,
-        boxRound, setBoxRound,
-        setNowPlaying, nowPlaying,
-        prioritySong, setPrioritySong,
-        addDjQueueItem,
-        voteCounts, setVoteCounts,
-        isTtsErrorMuted,
-        currentDj, setCurrentDj,
-        liveRatings, clearLiveRatings,
-        songEndedTrigger,
-        isLeader
-    } = useContext(RadioContext);
+  // Local state for managing the radio simulation.
+  const [isLoading, setIsLoading] = useState(true);
+  const [isChatVisible, setIsChatVisible] = useState(true);
+  const [showTtsErrorBanner, setShowTtsErrorBanner] = useState(true);
+  const [isPoolEmpty, setIsPoolEmpty] = useState(false);
+  const [userHasVoted, setUserHasVoted] = useState(false);
+  const prevSongsRef = useRef<Song[]>([]);
+  const lastDjRef = useRef<string>(currentDj.name);
 
-    // Local state for managing the radio simulation.
-    const [isLoading, setIsLoading] = useState(true);
-    const [isChatVisible, setIsChatVisible] = useState(true);
-    const [showTtsErrorBanner, setShowTtsErrorBanner] = useState(true);
-    const [isPoolEmpty, setIsPoolEmpty] = useState(false);
-    const [userHasVoted, setUserHasVoted] = useState(false);
-    const prevSongsRef = useRef<Song[]>([]);
-    const lastDjRef = useRef<string>(currentDj.name);
+  const lastRoundStartRef = useRef(0);
+  const startNextRoundRef = useRef<() => void>(() => { });
 
-    const lastRoundStartRef = useRef(0);
-    const startNextRoundRef = useRef<() => void>(() => { });
+  // Autoplay blocked state
+  const [isAutoplayBlocked, setIsAutoplayBlocked] = useState(false);
 
-    // Autoplay blocked state
-    const [isAutoplayBlocked, setIsAutoplayBlocked] = useState(false);
+  // Safety timeout for initialization
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (isLoading) {
+        console.warn(
+          "⚠️ Radio init timed out. Forcing load to enable backup protocol.",
+        );
+        setIsLoading(false);
+      }
+    }, 10000); // 10 seconds max wait
+    return () => clearTimeout(timer);
+  }, [isLoading]);
 
-    // Safety timeout for initialization
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            if (isLoading) {
-                console.warn("⚠️ Radio init timed out. Forcing load to enable backup protocol.");
-                setIsLoading(false);
-            }
-        }, 10000); // 10 seconds max wait
-        return () => clearTimeout(timer);
-    }, [isLoading]);
+  // Autoplay blocked state (managed by GlobalManager? For now keeping local UI state if needed, or remove)
+  // The GlobalBroadcastManager handles the actual play(), but we might want to know if it failed.
+  // Ideally we subscribe to 'playbackStateChanged' or similar.
+  // For now, let's trust the Context/Manager to handle this.
+  // Removing the redundant effect that fights with the manager.
 
-    // Autoplay blocked state (managed by GlobalManager? For now keeping local UI state if needed, or remove)
-    // The GlobalBroadcastManager handles the actual play(), but we might want to know if it failed.
-    // Ideally we subscribe to 'playbackStateChanged' or similar.
-    // For now, let's trust the Context/Manager to handle this.
-    // Removing the redundant effect that fights with the manager.
+  // Effect to check for DJ shift changes periodically.
+  useEffect(() => {
+    const shiftCheckInterval = setInterval(() => {
+      const newDj = getCurrentDj();
+      // If the DJ has changed since the last check, update the state.
+      if (newDj.name !== lastDjRef.current) {
+        // console.log(`DJ Shift Change: ${lastDjRef.current} -> ${newDj.name}`);
+        // Announce the shift change on air.
+        addDjQueueItem("dj_shift_change", {
+          context: { oldDj: lastDjRef.current, newDj: newDj.name },
+        });
+        setCurrentDj(newDj);
+        lastDjRef.current = newDj.name;
+      }
+    }, DJ_SHIFT_CHECK_INTERVAL_MS);
 
+    return () => clearInterval(shiftCheckInterval);
+  }, [setCurrentDj, addDjQueueItem]);
 
-    // Effect to check for DJ shift changes periodically.
-    useEffect(() => {
-        const shiftCheckInterval = setInterval(() => {
-            const newDj = getCurrentDj();
-            // If the DJ has changed since the last check, update the state.
-            if (newDj.name !== lastDjRef.current) {
-                // console.log(`DJ Shift Change: ${lastDjRef.current} -> ${newDj.name}`);
-                // Announce the shift change on air.
-                addDjQueueItem('dj_shift_change', { context: { oldDj: lastDjRef.current, newDj: newDj.name } });
-                setCurrentDj(newDj);
-                lastDjRef.current = newDj.name;
-            }
-        }, DJ_SHIFT_CHECK_INTERVAL_MS);
+  // Effect to check if the station should be considered "offline" (no songs in pool).
+  useEffect(() => {
+    const checkPool = async () => {
+      const { count, error } = await supabase
+        .from("songs")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "pool");
 
-        return () => clearInterval(shiftCheckInterval);
-    }, [setCurrentDj, addDjQueueItem]);
+      if (!error && count !== null) {
+        setIsPoolEmpty(count === 0);
+      }
+      setIsLoading(false);
+    };
+    checkPool();
+  }, []);
 
+  useEffect(() => {
+    // Only auto-start if:
+    // 1. We are the leader (Only leader orchestrates)
+    // 2. We have songs in the pool
+    // 3. Nothing is currently playing
+    // 4. We're not loading
+    // 5. We're in the initial DJ_BANTER_INTRO state (means radio hasn't started yet)
+    if (
+      isLeader &&
+      !isPoolEmpty &&
+      !nowPlaying &&
+      !isLoading &&
+      radioState === "DJ_BANTER_INTRO"
+    ) {
+      console.log(`🚀 AUTO-START (Leader): Starting radio...`);
+      setTimeout(() => {
+        startNextRoundRef.current();
+      }, 2000); // 2 second delay to let everything settle
+    }
+  }, [isPoolEmpty, nowPlaying, isLoading, radioState, isLeader]);
 
-    // Effect to check if the station should be considered "offline" (no songs in pool).
-    useEffect(() => {
-        const checkPool = async () => {
-            const { count, error } = await supabase
-                .from('songs')
-                .select('*', { count: 'exact', head: true })
-                .eq('status', 'pool');
+  // Effect to detect a new song submission and check if it qualifies for a priority debut.
+  useEffect(() => {
+    if (songs && songs.length > prevSongsRef.current.length) {
+      const newSong = songs[songs.length - 1];
+      if (newSong && profile) {
+        const userSongCount = songs.filter(
+          (s) => s.uploaderId === profile.user_id,
+        ).length;
+        let isPriority = userSongCount === 1;
 
-            if (!error && count !== null) {
-                setIsPoolEmpty(count === 0);
-            }
-            setIsLoading(false);
-        };
-        checkPool();
-    }, []);
-
-    useEffect(() => {
-        // Only auto-start if:
-        // 1. We are the leader (Only leader orchestrates)
-        // 2. We have songs in the pool
-        // 3. Nothing is currently playing
-        // 4. We're not loading
-        // 5. We're in the initial DJ_BANTER_INTRO state (means radio hasn't started yet)
-        if (isLeader && !isPoolEmpty && !nowPlaying && !isLoading && radioState === 'DJ_BANTER_INTRO') {
-            console.log(`🚀 AUTO-START (Leader): Starting radio...`);
-            setTimeout(() => {
-                startNextRoundRef.current();
-            }, 2000); // 2 second delay to let everything settle
-        }
-    }, [isPoolEmpty, nowPlaying, isLoading, radioState, isLeader]);
-
-
-    // Effect to detect a new song submission and check if it qualifies for a priority debut.
-    useEffect(() => {
-        if (songs && songs.length > prevSongsRef.current.length) {
-            const newSong = songs[songs.length - 1];
-            if (newSong && profile) {
-                const userSongCount = songs.filter(s => s.uploaderId === profile.user_id).length;
-                let isPriority = userSongCount === 1;
-
-                if (!isPriority && profile.lastDebutAt) {
-                    const lastDebutTime = new Date(profile.lastDebutAt).getTime();
-                    const hoursSince = (Date.now() - lastDebutTime) / (1000 * 60 * 60);
-                    if (hoursSince <= 24) {
-                        isPriority = true; // It's their second chance
-                    }
-                }
-
-                if (isPriority) {
-                    setPrioritySong({ ...newSong, status: 'debut' });
-                }
-            }
-            prevSongsRef.current = songs;
-        }
-    }, [songs, profile, setPrioritySong]);
-
-    // RECOVERY EFFECT: If we are in BOX_VOTING but have no candidates, fetch them.
-    useEffect(() => {
-        if (radioState === 'BOX_VOTING' && !boxRound && !isLoading) {
-            console.log("♻️ BOX_VOTING detected without candidates. Recovering from DB...");
-            const recoverBox = async () => {
-                const { data } = await supabase
-                    .from('songs')
-                    .select('*')
-                    .eq('status', 'in_box')
-                    .limit(3);
-
-                if (data && data.length > 0) {
-                    setBoxRound({
-                        id: `recovered-${Date.now()}`,
-                        candidates: data as Song[],
-                        startedAt: new Date().toISOString()
-                    });
-                } else {
-                    console.warn("⚠️ No 'in_box' songs found to recover.");
-                }
-            };
-            recoverBox();
-        }
-    }, [radioState, boxRound, isLoading, setBoxRound]);
-
-
-    // When TTS gets muted by an error, make sure the banner is available to be shown.
-    useEffect(() => {
-        if (isTtsErrorMuted) {
-            setShowTtsErrorBanner(true);
-        }
-    }, [isTtsErrorMuted]);
-
-    /**
-     * Handles a direct message to the DJ from the chat.
-     */
-    const handleDjMention = useCallback(async (messageText: string) => {
-        const strippedMessage = messageText.replace(/^@clubdj\s*/i, '').trim();
-        if (strippedMessage) {
-            await addDjQueueItem('user_mention', {
-                context: {
-                    userName: profile?.name || 'A Listener',
-                    message: strippedMessage
-                }
-            });
-        }
-    }, [addDjQueueItem, profile?.name]);
-
-    /**
-     * Selects candidate songs for the next round.
-     * Fetches from Supabase directly to stay efficient.
-     */
-    const selectNextCandidates = useCallback(async (count: number = 3, excludeIds: string[] = []): Promise<Song[]> => {
-        console.log(`🔍 Selecting ${count} candidates from DB (excluding ${excludeIds.length})...`);
-
-        let query = supabase
-            .from('songs')
-            .select('*')
-            .eq('status', 'pool');
-
-        if (excludeIds.length > 0) {
-            query = query.not('id', 'in', `(${excludeIds.join(',')})`);
+        if (!isPriority && profile.lastDebutAt) {
+          const lastDebutTime = new Date(profile.lastDebutAt).getTime();
+          const hoursSince = (Date.now() - lastDebutTime) / (1000 * 60 * 60);
+          if (hoursSince <= 24) {
+            isPriority = true; // It's their second chance
+          }
         }
 
-        const { data, error } = await query.limit(20);
+        if (isPriority) {
+          setPrioritySong({ ...newSong, status: "debut" });
+        }
+      }
+      prevSongsRef.current = songs;
+    }
+  }, [songs, profile, setPrioritySong]);
 
-        if (error || !data || data.length === 0) {
-            console.warn("⚠️ Pool empty or error, falling back to all songs");
-            const { data: fallbackData } = await supabase
-                .from('songs')
-                .select('*')
-                .limit(20);
-            return (fallbackData || []).sort(() => 0.5 - Math.random()).slice(0, count).map(s => (s as any));
+  // RECOVERY EFFECT: If we are in BOX_VOTING but have no candidates, fetch them.
+  useEffect(() => {
+    if (radioState === "BOX_VOTING" && !boxRound && !isLoading) {
+      console.log(
+        "♻️ BOX_VOTING detected without candidates. Recovering from DB...",
+      );
+      const recoverBox = async () => {
+        const { data } = await supabase
+          .from("songs")
+          .select("*")
+          .eq("status", "in_box")
+          .limit(3);
+
+        if (data && data.length > 0) {
+          setBoxRound({
+            id: `recovered-${Date.now()}`,
+            candidates: data as Song[],
+            startedAt: new Date().toISOString(),
+          });
+        } else {
+          console.warn("⚠️ No 'in_box' songs found to recover.");
+        }
+      };
+      recoverBox();
+    }
+  }, [radioState, boxRound, isLoading, setBoxRound]);
+
+  // --- HARD RESTART LISTENER ---
+  const { restartRadioTrigger } = useContext(RadioContext);
+
+  // Guard against double-firing
+  const isRestarting = useRef(false);
+
+  useEffect(() => {
+    if (restartRadioTrigger === 0) return; // Bypass leader check for Admin override
+    if (isRestarting.current) return;
+
+    isRestarting.current = true;
+
+    const hardRestartRadio = async () => {
+      console.log("🔥 HARD RESTART TRIGGERED (Once)");
+
+      // 1. Reset all local state
+      setVoteCounts({});
+      setBoxRound(null);
+      // If we joined mid-stream, sync immediately
+      const currentState = broadcastManager.getRadioState();
+      if (currentState !== "OFFLINE" && currentState !== "DJ_BANTER_INTRO") {
+        setRadioState(currentState);
+        const currentSong = broadcastManager.getNowPlaying();
+        if (currentSong) setNowPlaying(currentSong);
+      } else {
+        // Otherwise, start from the beginning
+        setRadioState("DJ_BANTER_INTRO");
+      }
+
+      // 2. Reset Database (Nuclear)
+      await supabase
+        .from("songs")
+        .update({ status: "pool" })
+        .neq("status", "graveyard");
+
+      // 3. Force start new round after short delay
+      setTimeout(async () => {
+        console.log("🔥 Picking a random song to kickstart...");
+
+        // Fetch pool of potential songs, ensuring they have audio
+        const { data, error } = await supabase
+          .from("songs")
+          .select("*")
+          .limit(50);
+
+        if (error) console.error("Error fetching pool:", error);
+
+        if (data && data.length > 0) {
+          // Double check for valid URL on client side (checking both casing variations)
+          const validSongs = data.filter((s: any) =>
+            (s.audioUrl && s.audioUrl.length > 10) ||
+            (s.audio_url && s.audio_url.length > 10)
+          );
+          console.log(`🔎 Found ${validSongs.length} valid playback candidates.`);
+
+          if (validSongs.length === 0) {
+            console.error("❌ No valid songs found for restart!");
+            isRestarting.current = false;
+            return;
+          }
+
+          // Pick one random song
+          const rawSong = validSongs[
+            Math.floor(Math.random() * validSongs.length)
+          ] as any;
+
+          // Normalize the song object to match our internal Song type (camelCase)
+          // This handles the case where Supabase returns snake_case (audio_url)
+          const randomSong: Song = {
+            ...rawSong,
+            audioUrl: rawSong.audioUrl || rawSong.audio_url,
+            coverArtUrl: rawSong.coverArtUrl || rawSong.cover_art_url,
+            artistName: rawSong.artistName || rawSong.artist_name,
+            durationSec: rawSong.durationSec || rawSong.duration_seq,
+            uploadedBy: rawSong.uploadedBy || rawSong.uploaded_by,
+          };
+
+          console.log(`✅ Selected Restart Song: ${randomSong.title} (URL: ${randomSong.audioUrl})`);
+
+          await updateSong(randomSong.id, {
+            status: "now_playing",
+            lastPlayedAt: new Date().toISOString(),
+          });
+
+          setNowPlaying(randomSong);
+          setRadioState("NOW_PLAYING");
+
+          // Announce it
+          await addDjQueueItem("filler", {
+            context: "System reboot complete. Let's get the music back on.",
+          });
         }
 
-        // Shuffle and take requested count
-        return data.sort(() => 0.5 - Math.random()).slice(0, count).map(s => (s as any));
-    }, [nowPlaying?.id]);
+        // Release lock after a delay to allow state to settle
+        setTimeout(() => { isRestarting.current = false; }, 2000);
+      }, 1000);
+    };
 
-    /**
-     * Ends the current voting round, selects a winner, and transitions to playing it.
-     */
-    const endVotingRound = useCallback(async () => {
-        if (!isLeader) return;
-        if (!boxRound) return;
+    hardRestartRadio();
+  }, [restartRadioTrigger]);
 
-        // Determine the winner based on vote counts.
-        const winner = [...boxRound.candidates].sort((a, b) => (voteCounts[b.id] || 0) - (voteCounts[a.id] || 0))[0];
+  // When TTS gets muted by an error, make sure the banner is available to be shown.
+  useEffect(() => {
+    if (isTtsErrorMuted) {
+      setShowTtsErrorBanner(true);
+    }
+  }, [isTtsErrorMuted]);
 
-        await addDjQueueItem('winner_announcement', { song: { title: winner.title, artistName: winner.artistName } });
+  /**
+   * Handles a direct message to the DJ from the chat.
+   */
+  const handleDjMention = useCallback(
+    async (messageText: string) => {
+      const strippedMessage = messageText.replace(/^@clubdj\s*/i, "").trim();
+      if (strippedMessage) {
+        await addDjQueueItem("user_mention", {
+          context: {
+            userName: profile?.name || "A Listener",
+            message: strippedMessage,
+          },
+        });
+      }
+    },
+    [addDjQueueItem, profile?.name],
+  );
 
-        setNowPlaying(winner);
-        setRadioState('NOW_PLAYING');
+  /**
+   * Selects candidate songs for the next round.
+   * Fetches from Supabase directly to stay efficient.
+   */
+  const selectNextCandidates = useCallback(
+    async (count: number = 3, excludeIds: string[] = []): Promise<Song[]> => {
+      console.log(
+        `🔍 Selecting ${count} candidates from DB (excluding ${excludeIds.length})...`,
+      );
 
-        // Update the winner in the DB is enough; we don't need a local monolithic pool update.
-        await updateSong(winner.id, {
-            stars: Math.min(10, (winner.stars || 0) + 1),
-            status: 'now_playing',
-            playCount: (winner.playCount || 0) + 1,
-            lastPlayedAt: new Date().toISOString()
+      let query = supabase.from("songs").select("*").eq("status", "pool");
+
+      if (excludeIds.length > 0) {
+        query = query.not("id", "in", `(${excludeIds.join(",")})`);
+      }
+
+      const { data, error } = await query.limit(20);
+
+      if (error || !data || data.length === 0) {
+        console.warn("⚠️ Pool empty or error, falling back to all songs");
+        const { data: fallbackData } = await supabase
+          .from("songs")
+          .select("*")
+          .limit(20);
+        return (fallbackData || [])
+          .sort(() => 0.5 - Math.random())
+          .slice(0, count)
+          .map((s) => s as any);
+      }
+
+      // Shuffle and take requested count
+      return data
+        .sort(() => 0.5 - Math.random())
+        .slice(0, count)
+        .map((s) => s as any);
+    },
+    [nowPlaying?.id],
+  );
+
+  /**
+   * Ends the current voting round, selects a winner, and transitions to playing it.
+   */
+  const endVotingRound = useCallback(async () => {
+    if (!isLeader) return;
+    if (!boxRound) return;
+
+    // Determine the winner based on vote counts.
+    const winner = [...boxRound.candidates].sort(
+      (a, b) => (voteCounts[b.id] || 0) - (voteCounts[a.id] || 0),
+    )[0];
+
+    await addDjQueueItem("winner_announcement", {
+      song: { title: winner.title, artistName: winner.artistName },
+    });
+
+    setNowPlaying(winner);
+    setRadioState("NOW_PLAYING");
+
+    // --- SAFETY SWEEP: Ensure Single Source of Truth ---
+    // Before marking the new winner, reset ANY existing 'now_playing' songs to 'pool'.
+    // This cleans up any ghosts from previous errors.
+    await supabase
+      .from("songs")
+      .update({ status: "pool" })
+      .eq("status", "now_playing");
+
+    setVoteCounts({});
+
+    // Update the winner to be the ONLY playing song
+    await updateSong(winner.id, {
+      stars: Math.min(10, (winner.stars || 0) + 1),
+      status: "now_playing",
+      playCount: (winner.playCount || 0) + 1,
+      lastPlayedAt: new Date().toISOString(),
+    });
+  }, [boxRound, voteCounts, addDjQueueItem, setNowPlaying, setRadioState]);
+
+  /**
+   * Starts the next round of voting by selecting candidates and setting up the state.
+   * Called when a song ends or when manually triggered.
+   */
+  const startNextRound = useCallback(async () => {
+    if (!isLeader) return;
+    // Debounce: Prevent starting a new round too quickly (e.g. < 2 seconds)
+    if (Date.now() - lastRoundStartRef.current < 2000) {
+      return;
+    }
+    lastRoundStartRef.current = Date.now();
+
+    // Priority song handling (e.g., debut song gets immediate play)
+    if (prioritySong) {
+      setNowPlaying(prioritySong);
+      setRadioState("NOW_PLAYING");
+      updateSong(prioritySong.id, { status: "debut" });
+      await addDjQueueItem("new_artist_shoutout", {
+        song: {
+          title: prioritySong.title,
+          artistName: prioritySong.artistName,
+        },
+      });
+      setPrioritySong(null); // Clear the queue after use.
+      return;
+    }
+
+    // Before selecting new candidates, penalize the losers from the last round.
+    if (boxRound) {
+      const unchosen = boxRound.candidates.filter(
+        (c) => c.id !== nowPlaying?.id,
+      );
+      for (const song of unchosen) {
+        // Immediate -1 star penalty for losers
+        const newStars = Math.max(0, (song.stars || 0) - 1);
+        // Increment box loss count
+        const newLosses = (song.boxRoundsLost || 0) + 1;
+
+        // PERSIST: Update DB
+        await updateSong(song.id, {
+          stars: newStars,
+          status: "pool",
+          boxRoundsLost: newLosses,
+        });
+      }
+    }
+
+    // Sticky Box Logic:
+    // We preserve the survivors from the previous round and only fetch a replacement for the winner.
+    let boxCandidates: Song[] = [];
+
+    if (!nowPlaying) {
+      // Cold start: fetch 4 songs (1 for play, 3 for box)
+      const initialSongs = await selectNextCandidates(4);
+      if (initialSongs.length > 0) {
+        const nextNowPlaying = initialSongs[0];
+        boxCandidates = initialSongs.slice(1, 4);
+
+        setNowPlaying(nextNowPlaying);
+        setRadioState("NOW_PLAYING");
+        await updateSong(nextNowPlaying.id, {
+          status: "now_playing",
+          lastPlayedAt: new Date().toISOString(),
+        });
+      }
+    } else {
+      // Round transition: current nowPlaying is the winner of the PREVIOUS box.
+      // Other candidates from that box SURVIVE and stay in the box.
+      const survivors = boxRound
+        ? boxRound.candidates.filter((c) => c.id !== nowPlaying.id)
+        : [];
+
+      // We need to fetch enough to make the box have 3 candidates
+      const neededForBox = 3 - survivors.length;
+      const excludeIds = [nowPlaying.id, ...survivors.map((s) => s.id)];
+
+      console.log(
+        `♻️ Sticky Box: ${survivors.length} survivors, fetching ${neededForBox} fresh...`,
+      );
+      const freshSongs = await selectNextCandidates(neededForBox, excludeIds);
+      boxCandidates = [...survivors, ...freshSongs];
+    }
+
+    if (boxCandidates.length > 0) {
+      setBoxRound({
+        id: `round-${Date.now()}`,
+        candidates: boxCandidates,
+        startedAt: new Date().toISOString(),
+      });
+
+      // --- SAFETY SWEEP: Clean up The Box ---
+      // Reset any songs marked 'in_box' that are NOT in our new candidate list.
+      const newCandidateIds = boxCandidates.map((c) => c.id);
+      if (newCandidateIds.length > 0) {
+        await supabase
+          .from("songs")
+          .update({ status: "pool" })
+          .eq("status", "in_box")
+          .not("id", "in", `(${newCandidateIds.join(",")})`);
+      }
+
+      // PERSIST: Update status AND Box Appearance Count (now safe to set)
+      for (const cand of boxCandidates) {
+        const newAppearanceCount = (cand.boxAppearanceCount || 0) + 1;
+        await updateSong(cand.id, {
+          status: "in_box",
+          boxAppearanceCount: newAppearanceCount,
+        });
+      }
+
+      setVoteCounts({});
+      setUserHasVoted(false);
+      setRadioState("BOX_VOTING");
+
+      const context = `The Gauntlet is set. ${boxCandidates.length} tracks enter... one gets played.`;
+      addDjQueueItem("new_box_round", { context });
+    } else {
+      await addDjQueueItem("empty_queue_banter");
+      setRadioState("DJ_TALKING");
+      setTimeout(() => startNextRoundRef.current(), 5000);
+    }
+  }, [
+    isLeader,
+    boxRound,
+    nowPlaying,
+    selectNextCandidates,
+    setNowPlaying,
+    setRadioState,
+    addDjQueueItem,
+    setBoxRound,
+    setVoteCounts,
+    setUserHasVoted,
+    prioritySong,
+    setPrioritySong,
+    updateSong,
+  ]);
+
+  // Update ref whenever the function changes so we can call it from timeouts/effects
+  useEffect(() => {
+    startNextRoundRef.current = startNextRound;
+  }, [startNextRound]);
+
+  useEffect(() => {
+    if (!isLeader || radioState !== "BOX_VOTING" || !boxRound) return;
+
+    // Simulated votes happen continuously while Box is active
+    const voteInterval = setInterval(() => {
+      const candidateIds = boxRound.candidates.map((c) => c.id);
+      if (candidateIds.length > 0) {
+        const randomCandidateId =
+          candidateIds[Math.floor(Math.random() * candidateIds.length)];
+        setVoteCounts((counts) => ({
+          ...counts,
+          [randomCandidateId]:
+            (counts[randomCandidateId] || 0) +
+            Math.floor(Math.random() * 5) +
+            1,
+        }));
+      }
+    }, 800);
+
+    return () => {
+      clearInterval(voteInterval);
+    };
+  }, [radioState, boxRound, setVoteCounts]);
+
+  // AUTO-END VOTING ROUND (Fix for Stalled Radio)
+  useEffect(() => {
+    if (radioState === "BOX_VOTING" && isLeader) {
+      // console.log("⏳ Voting round started. Auto-closing in 45s...");
+      const timer = setTimeout(() => {
+        console.log("⏰ Voting time's up! Selecting winner...");
+        endVotingRound();
+      }, 45000); // 45 seconds voting duration
+      return () => clearTimeout(timer);
+    }
+  }, [radioState, isLeader, endVotingRound]);
+
+  useEffect(() => {
+    if (songEndedTrigger === 0 || !nowPlaying) return;
+    if (!isLeader) return;
+
+    console.log(
+      "🎵 Song ended event received (Leader logic):",
+      songEndedTrigger,
+    );
+
+    const handleSongEnd = async () => {
+      const endedSong = nowPlaying;
+
+      // --- DEBUT SONG LOGIC ---
+      if (endedSong.status === "debut") {
+        const totalRating = liveRatings.reduce(
+          (sum, rating) => sum + rating,
+          0,
+        );
+        const finalRating =
+          liveRatings.length > 0 ? totalRating / liveRatings.length : 0;
+
+        await addDjQueueItem("debut_song_outro", {
+          song: {
+            title: endedSong.title,
+            artistName: endedSong.artistName,
+            finalRating,
+          },
         });
 
-        setVoteCounts({});
-    }, [boxRound, voteCounts, addDjQueueItem, setNowPlaying, setRadioState]);
+        if (finalRating < DEBUT_RATING_SURVIVAL_THRESHOLD) {
+          // Instant Graveyard
+          // PERSIST: Graveyard
+          updateSong(endedSong.id, { status: "graveyard", stars: finalRating });
 
-    /**
-     * Starts the next round of voting by selecting candidates and setting up the state.
-     * Called when a song ends or when manually triggered.
-     */
-    const startNextRound = useCallback(async () => {
-        if (!isLeader) return;
-        // Debounce: Prevent starting a new round too quickly (e.g. < 2 seconds)
-        if (Date.now() - lastRoundStartRef.current < 2000) {
-            return;
-        }
-        lastRoundStartRef.current = Date.now();
-
-        // Priority song handling (e.g., debut song gets immediate play)
-        if (prioritySong) {
-            setNowPlaying(prioritySong);
-            setRadioState('NOW_PLAYING');
-            updateSong(prioritySong.id, { status: 'debut' });
-            await addDjQueueItem('new_artist_shoutout', { song: { title: prioritySong.title, artistName: prioritySong.artistName } });
-            setPrioritySong(null); // Clear the queue after use.
-            return;
-        }
-
-        // Before selecting new candidates, penalize the losers from the last round.
-        if (boxRound) {
-            const unchosen = boxRound.candidates.filter(c => c.id !== nowPlaying?.id);
-            for (const song of unchosen) {
-                // Immediate -1 star penalty for losers
-                const newStars = Math.max(0, (song.stars || 0) - 1);
-                // Increment box loss count
-                const newLosses = (song.boxRoundsLost || 0) + 1;
-
-                // PERSIST: Update DB
-                await updateSong(song.id, { stars: newStars, status: 'pool', boxRoundsLost: newLosses });
-            }
-        }
-
-        // Sticky Box Logic:
-        // We preserve the survivors from the previous round and only fetch a replacement for the winner.
-        let boxCandidates: Song[] = [];
-
-        if (!nowPlaying) {
-            // Cold start: fetch 4 songs (1 for play, 3 for box)
-            const initialSongs = await selectNextCandidates(4);
-            if (initialSongs.length > 0) {
-                const nextNowPlaying = initialSongs[0];
-                boxCandidates = initialSongs.slice(1, 4);
-
-                setNowPlaying(nextNowPlaying);
-                setRadioState('NOW_PLAYING');
-                await updateSong(nextNowPlaying.id, { status: 'now_playing', lastPlayedAt: new Date().toISOString() });
-            }
+          // Update user profile to start 24h timer
+          if (profile) {
+            const newProfile = {
+              ...profile,
+              lastDebutAt: new Date().toISOString(),
+            };
+            setProfile(newProfile); // Update local state
+            await supabase
+              .from("profiles")
+              .update({ last_debut_at: newProfile.lastDebutAt })
+              .eq("user_id", profile.user_id);
+          }
         } else {
-            // Round transition: current nowPlaying is the winner of the PREVIOUS box.
-            // Other candidates from that box SURVIVE and stay in the box.
-            const survivors = boxRound ? boxRound.candidates.filter(c => c.id !== nowPlaying.id) : [];
+          // Survived! Enter the pool.
+          // PERSIST: Survival
+          updateSong(endedSong.id, { status: "pool", stars: finalRating });
 
-            // We need to fetch enough to make the box have 3 candidates
-            const neededForBox = 3 - survivors.length;
-            const excludeIds = [nowPlaying.id, ...survivors.map(s => s.id)];
-
-            console.log(`♻️ Sticky Box: ${survivors.length} survivors, fetching ${neededForBox} fresh...`);
-            const freshSongs = await selectNextCandidates(neededForBox, excludeIds);
-            boxCandidates = [...survivors, ...freshSongs];
+          if (profile?.lastDebutAt) {
+            // Clear the second chance timer on success
+            const newProfile = { ...profile, lastDebutAt: null };
+            setProfile(newProfile);
+            await supabase
+              .from("profiles")
+              .update({ last_debut_at: null })
+              .eq("user_id", profile.user_id);
+          }
         }
+        clearLiveRatings();
+      } else {
+        // --- REGULAR SONG LOGIC ---
+        // Return song to pool
+        // PERSIST: Return to Pool
+        updateSong(endedSong.id, { status: "pool" });
 
-        if (boxCandidates.length > 0) {
-            setBoxRound({ id: `round-${Date.now()}`, candidates: boxCandidates, startedAt: new Date().toISOString() });
-
-            // PERSIST: Update status AND Box Appearance Count
-            for (const cand of boxCandidates) {
-                const newAppearanceCount = (cand.boxAppearanceCount || 0) + 1;
-                await updateSong(cand.id, {
-                    status: 'in_box',
-                    boxAppearanceCount: newAppearanceCount
-                });
-            }
-
-            setVoteCounts({});
-            setUserHasVoted(false);
-            setRadioState('BOX_VOTING');
-
-            const context = `The Gauntlet is set. ${boxCandidates.length} tracks enter... one gets played.`;
-            addDjQueueItem('new_box_round', { context });
-        } else {
-            await addDjQueueItem('empty_queue_banter');
-            setRadioState('DJ_TALKING');
-            setTimeout(() => startNextRoundRef.current(), 5000);
+        await addDjQueueItem("outro", {
+          song: { title: endedSong.title, artistName: endedSong.artistName },
+        });
+        const rand = Math.random();
+        if (rand < 0.2) {
+          await addDjQueueItem("premium_cta");
+        } else if (rand < 0.4) {
+          await addDjQueueItem("system_explainer");
         }
-    }, [isLeader, boxRound, nowPlaying, selectNextCandidates, setNowPlaying, setRadioState, addDjQueueItem, setBoxRound, setVoteCounts, setUserHasVoted, prioritySong, setPrioritySong, updateSong]);
+      }
 
-    // Update ref whenever the function changes so we can call it from timeouts/effects
-    useEffect(() => {
-        startNextRoundRef.current = startNextRound;
-    }, [startNextRound]);
+      // If Box was active during this song, end voting and select winner
+      if (radioState === "BOX_VOTING" && boxRound) {
+        console.log("📦 Song ended during Box voting - selecting winner");
+        await endVotingRound();
+      } else {
+        // No Box was active, just start next round normally
+        setTimeout(() => {
+          startNextRoundRef.current();
+        }, POST_SONG_DELAY_MS);
+      }
+    };
 
+    handleSongEnd();
+  }, [songEndedTrigger]); // Only run when the trigger increments!
 
+  /**
+   * Handles a user's vote for a specific song in The Box.
+   */
+  const handleUserVote = useCallback(
+    async (songId: string) => {
+      if (!boxRound || userHasVoted) return;
 
-    useEffect(() => {
-        if (!isLeader || radioState !== 'BOX_VOTING' || !boxRound) return;
+      // console.log(`🗳️ User voted for song: ${songId}`);
 
-        // Simulated votes happen continuously while Box is active
-        const voteInterval = setInterval(() => {
-            const candidateIds = boxRound.candidates.map(c => c.id);
-            if (candidateIds.length > 0) {
-                const randomCandidateId = candidateIds[Math.floor(Math.random() * candidateIds.length)];
-                setVoteCounts(counts => ({
-                    ...counts,
-                    [randomCandidateId]: (counts[randomCandidateId] || 0) + Math.floor(Math.random() * 5) + 1,
-                }));
-            }
-        }, 800);
+      // Optimistic update local state
+      setVoteCounts((prev) => ({
+        ...prev,
+        [songId]: (prev[songId] || 0) + 1,
+      }));
 
-        return () => {
-            clearInterval(voteInterval);
-        };
-    }, [radioState, boxRound, setVoteCounts]);
+      setUserHasVoted(true);
 
-    useEffect(() => {
-        if (songEndedTrigger === 0 || !nowPlaying) return;
-        if (!isLeader) return;
+      // PERSIST: Update the song's upvote count in the database
+      // We find the song in the candidates to get current upvotes, then increment
+      const song = boxRound.candidates.find((c) => c.id === songId);
+      if (song) {
+        const newUpvotes = (song.upvotes || 0) + 1;
+        await updateSong(songId, { upvotes: newUpvotes });
+        console.log(
+          `✅ Persisted vote for "${song.title}": ${newUpvotes} upvotes`,
+        );
+      }
+    },
+    [boxRound, userHasVoted, setVoteCounts, setUserHasVoted],
+  );
 
-        console.log("🎵 Song ended event received (Leader logic):", songEndedTrigger);
+  /**
+   * Handles the structured sequence for a "Live Roast Call".
+   * Dialing -> Active -> Ended -> Cleanup.
+   */
+  const initiateRoastCall = useCallback(
+    async (artistId: string, artistName: string) => {
+      try {
+        const artistProfile = await getProfile(artistId);
 
-        const handleSongEnd = async () => {
-            const endedSong = nowPlaying;
+        // Logic: If artist is VIP and consented, trigger the call.
+        if (
+          artistProfile &&
+          artistProfile.is_premium &&
+          artistProfile.roast_consent
+        ) {
+          console.log("📞 Initiating Live Roast Call for", artistName);
 
-            // --- DEBUT SONG LOGIC ---
-            if (endedSong.status === 'debut') {
-                const totalRating = liveRatings.reduce((sum, rating) => sum + rating, 0);
-                const finalRating = liveRatings.length > 0 ? totalRating / liveRatings.length : 0;
+          // 1. Dialing
+          setRoastCall({
+            artistName,
+            phoneNumber: artistProfile.phone_number,
+            status: "dialing",
+          });
 
-                await addDjQueueItem('debut_song_outro', { song: { title: endedSong.title, artistName: endedSong.artistName, finalRating } });
+          // 2. Wait 2.5s for "dialing" effect
+          await new Promise((r) => setTimeout(r, 2500));
 
-                if (finalRating < DEBUT_RATING_SURVIVAL_THRESHOLD) {
-                    // Instant Graveyard
-                    // PERSIST: Graveyard
-                    updateSong(endedSong.id, { status: 'graveyard', stars: finalRating });
+          // 3. Active Call
+          setRoastCall((prev) => (prev ? { ...prev, status: "active" } : null));
 
-                    // Update user profile to start 24h timer
-                    if (profile) {
-                        const newProfile = { ...profile, lastDebutAt: new Date().toISOString() };
-                        setProfile(newProfile); // Update local state
-                        await supabase.from('profiles').update({ last_debut_at: newProfile.lastDebutAt }).eq('user_id', profile.user_id);
-                    }
-                } else {
-                    // Survived! Enter the pool.
-                    // PERSIST: Survival
-                    updateSong(endedSong.id, { status: 'pool', stars: finalRating });
+          // 4. Stay active for 8s (time for the DJ line to play)
+          await new Promise((r) => setTimeout(r, 8000));
 
-                    if (profile?.lastDebutAt) { // Clear the second chance timer on success
-                        const newProfile = { ...profile, lastDebutAt: null };
-                        setProfile(newProfile);
-                        await supabase.from('profiles').update({ last_debut_at: null }).eq('user_id', profile.user_id);
-                    }
-                }
-                clearLiveRatings();
+          // 5. End Call
+          setRoastCall((prev) => (prev ? { ...prev, status: "ended" } : null));
 
-            } else {
-                // --- REGULAR SONG LOGIC ---
-                // Return song to pool
-                // PERSIST: Return to Pool
-                updateSong(endedSong.id, { status: 'pool' });
-
-                await addDjQueueItem('outro', { song: { title: endedSong.title, artistName: endedSong.artistName } });
-                const rand = Math.random();
-                if (rand < 0.2) {
-                    await addDjQueueItem('premium_cta');
-                } else if (rand < 0.4) {
-                    await addDjQueueItem('system_explainer');
-                }
-            }
-
-            // If Box was active during this song, end voting and select winner
-            if (radioState === 'BOX_VOTING' && boxRound) {
-                console.log('📦 Song ended during Box voting - selecting winner');
-                await endVotingRound();
-            } else {
-                // No Box was active, just start next round normally
-                setTimeout(() => {
-                    startNextRoundRef.current();
-                }, POST_SONG_DELAY_MS);
-            }
-        };
-
-        handleSongEnd();
-
-    }, [songEndedTrigger]); // Only run when the trigger increments!
-
-    /**
-     * Handles a user's vote for a specific song in The Box.
-     */
-    const handleUserVote = useCallback(async (songId: string) => {
-        if (!boxRound || userHasVoted) return;
-
-        // console.log(`🗳️ User voted for song: ${songId}`);
-
-        // Optimistic update local state
-        setVoteCounts(prev => ({
-            ...prev,
-            [songId]: (prev[songId] || 0) + 1
-        }));
-
-        setUserHasVoted(true);
-
-        // PERSIST: Update the song's upvote count in the database
-        // We find the song in the candidates to get current upvotes, then increment
-        const song = boxRound.candidates.find(c => c.id === songId);
-        if (song) {
-            const newUpvotes = (song.upvotes || 0) + 1;
-            await updateSong(songId, { upvotes: newUpvotes });
-            console.log(`✅ Persisted vote for "${song.title}": ${newUpvotes} upvotes`);
+          // 6. Brief pause then cleanup
+          await new Promise((r) => setTimeout(r, 2000));
+          setRoastCall(null);
         }
-    }, [boxRound, userHasVoted, setVoteCounts, setUserHasVoted]);
+      } catch (err) {
+        console.error("Failed to initiate roast call:", err);
+        setRoastCall(null);
+      }
+    },
+    [],
+  );
 
-    /**
-     * Handles the structured sequence for a "Live Roast Call".
-     * Dialing -> Active -> Ended -> Cleanup.
-     */
-    const initiateRoastCall = useCallback(async (artistId: string, artistName: string) => {
-        try {
-            const artistProfile = await getProfile(artistId);
+  /**
+   * Handles star rating updates for the currently playing song.
+   * If stars drop to 0, the song is sent to the graveyard.
+   */
+  const handleStarVote = useCallback(
+    async (newRating: number) => {
+      if (!nowPlaying) return;
 
-            // Logic: If artist is VIP and consented, trigger the call.
-            if (artistProfile && artistProfile.is_premium && artistProfile.roast_consent) {
-                console.log("📞 Initiating Live Roast Call for", artistName);
+      console.log(`⭐ Rating updated for ${nowPlaying.title}: ${newRating}`);
 
-                // 1. Dialing
-                setRoastCall({
-                    artistName,
-                    phoneNumber: artistProfile.phone_number,
-                    status: 'dialing'
-                });
+      // Update local state immediately.
+      setNowPlaying({ ...nowPlaying, stars: newRating }, -1);
 
-                // 2. Wait 2.5s for "dialing" effect
-                await new Promise(r => setTimeout(r, 2500));
+      // Check for Graveyard condition
+      if (newRating <= 0) {
+        console.log("🪦 Song died! Sending to Graveyard...");
 
-                // 3. Active Call
-                setRoastCall(prev => prev ? { ...prev, status: 'active' } : null);
+        // Trigger the "Live Roast Call" UI sequence if applicable
+        initiateRoastCall(nowPlaying.uploaderId, nowPlaying.artistName);
 
-                // 4. Stay active for 8s (time for the DJ line to play)
-                await new Promise(r => setTimeout(r, 8000));
+        await addDjQueueItem("graveyard_roast", {
+          song: { title: nowPlaying.title, artistName: nowPlaying.artistName },
+        });
 
-                // 5. End Call
-                setRoastCall(prev => prev ? { ...prev, status: 'ended' } : null);
+        // Update DB
+        updateSong(nowPlaying.id, { stars: 0, status: "graveyard" });
+      } else {
+        // Just update stars
+        updateSong(nowPlaying.id, { stars: newRating });
+      }
+    },
+    [nowPlaying, setNowPlaying, addDjQueueItem, initiateRoastCall],
+  );
 
-                // 6. Brief pause then cleanup
-                await new Promise(r => setTimeout(r, 2000));
-                setRoastCall(null);
-            }
-        } catch (err) {
-            console.error("Failed to initiate roast call:", err);
-            setRoastCall(null);
-        }
-    }, []);
+  const isStandby = !nowPlaying && radioState !== "BOX_VOTING" && !isLoading;
 
-    /**
-     * Handles star rating updates for the currently playing song.
-     * If stars drop to 0, the song is sent to the graveyard.
-     */
-    const handleStarVote = useCallback(async (newRating: number) => {
-        if (!nowPlaying) return;
+  return (
+    <div className="h-full flex flex-col pb-24 relative">
+      <Header
+        onNavigate={onNavigate}
+        onToggleChat={() => setIsChatVisible(!isChatVisible)}
+        isChatVisible={isChatVisible}
+      />
 
-        console.log(`⭐ Rating updated for ${nowPlaying.title}: ${newRating}`);
-
-        // Update local state immediately.
-        setNowPlaying({ ...nowPlaying, stars: newRating }, -1);
-
-        // Check for Graveyard condition
-        if (newRating <= 0) {
-            console.log("🪦 Song died! Sending to Graveyard...");
-
-            // Trigger the "Live Roast Call" UI sequence if applicable
-            initiateRoastCall(nowPlaying.uploaderId, nowPlaying.artistName);
-
-            await addDjQueueItem('graveyard_roast', {
-                song: { title: nowPlaying.title, artistName: nowPlaying.artistName }
-            });
-
-            // Update DB
-            updateSong(nowPlaying.id, { stars: 0, status: 'graveyard' });
-        } else {
-            // Just update stars
-            updateSong(nowPlaying.id, { stars: newRating });
-        }
-    }, [nowPlaying, setNowPlaying, addDjQueueItem, initiateRoastCall]);
-
-    const isStandby = !nowPlaying && radioState !== 'BOX_VOTING' && !isLoading;
-
-    return (
-        <div className="h-full flex flex-col pb-24 relative">
-            <Header onNavigate={onNavigate} onToggleChat={() => setIsChatVisible(!isChatVisible)} isChatVisible={isChatVisible} />
-
-            {isTtsErrorMuted && showTtsErrorBanner && (
-                <div className="bg-red-900/50 border-y border-red-500/50 text-red-200 text-sm p-3 mx-4 sm:mx-8 mb-4 flex justify-between items-center animate-fade-in">
-                    <p className="pr-4">
-                        <strong>DJ Voice Unavailable:</strong> API quota may be reached. The DJ script will continue to appear in the ticker below.
-                    </p>
-                    <button onClick={() => setShowTtsErrorBanner(false)} className="p-1 rounded-full hover:bg-red-800/50 flex-shrink-0">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
-                </div>
-            )}
-
-            {/* Click to Start Overlay for Blocked Autoplay */}
-            {isAutoplayBlocked && !isLoading && (
-                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
-                    <button
-                        onClick={() => {
-                            const { getBroadcastManager } = require('../services/globalBroadcastManager');
-                            getBroadcastManager().play();
-                            setIsAutoplayBlocked(false);
-                        }}
-                        className="bg-green-500 hover:bg-green-400 text-black font-bold py-4 px-8 rounded-full shadow-[0_0_30px_rgba(34,197,94,0.5)] transform hover:scale-105 transition-all flex items-center gap-3"
-                    >
-                        <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                        <span>TUNE IN NOW</span>
-                    </button>
-                </div>
-            )}
-
-            {isLoading ? (
-                <div className="flex-grow flex items-center justify-center">
-                    <Loader message="Tuning in..." />
-                </div>
-            ) : (
-                <div className="flex-grow flex flex-col min-h-0 px-4 sm:px-8">
-                    {/* EMPTY MAIN SCREEN AREA - for future visualizations */}
-                    <div className="flex-grow relative">
-                        {/* Future: Add visualizations, events, etc here */}
-
-                        {/* Station Offline State */}
-                        {isPoolEmpty && !isLoading && (
-                            <div className="absolute inset-0 flex items-center justify-center p-4 text-center animate-fade-in pointer-events-auto z-50">
-                                <div className="bg-black/80 p-8 rounded-xl border border-red-500/30 backdrop-blur-md">
-                                    <h3 className="text-3xl font-display text-red-500 mb-2">STATION OFFLINE</h3>
-                                    <p className="text-lg text-gray-400">No signals detected in the Youniverse.</p>
-                                    <p className="text-sm text-gray-500 mt-4">Upload a song to jumpstart the broadcast.</p>
-                                </div>
-                            </div>
-                        )}
-
-                        {isStandby && !isPoolEmpty && (
-                            <div className="absolute inset-0 flex items-center justify-center p-4 text-center animate-fade-in pointer-events-none">
-                                <div>
-                                    <h3 className="text-2xl font-display text-yellow-400">Stand By</h3>
-                                    <p className="text-lg text-gray-400">{currentDj.name} is cueing up the next round...</p>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* 5 SMALL CARDS AT BOTTOM */}
-                    <div className="flex gap-4 mt-8 pb-4 justify-between px-12 items-end">
-                        {/* 1. DJ Booth - far left */}
-                        <div className="w-80 flex-shrink-0">
-                            <DjBooth profile={profile} />
-                        </div>
-
-                        {/* 2-4. The Box - 3 cards in the middle */}
-                        {boxRound && boxRound.candidates.length > 0 && (
-                            <TheBox
-                                candidates={boxRound.candidates}
-                                onVote={handleUserVote}
-                                voteCounts={voteCounts}
-                                userHasVoted={userHasVoted}
-                                isVotingActive={radioState === 'BOX_VOTING'}
-                            />
-                        )}
-
-                        {/* 5. Now Playing - far right */}
-                        {nowPlaying && (
-                            <div className="w-44 flex-shrink-0 ml-auto group relative">
-                                <div className="bg-gray-900/80 border border-green-500/30 rounded-lg p-2 h-full flex flex-col transition-all duration-300 hover:scale-105 hover:z-10 hover:shadow-[0_0_20px_rgba(34,197,94,0.3)]">
-                                    <div className="text-[10px] text-green-400 mb-1 font-bold tracking-wider">ON AIR</div>
-                                    <div className="relative w-full aspect-square rounded overflow-hidden mb-2">
-                                        <img src={nowPlaying.coverArtUrl} alt={nowPlaying.title} className="w-full h-full object-cover" />
-                                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-1">
-                                            <span className="text-[8px] text-white">Click for Lyrics</span>
-                                        </div>
-                                    </div>
-
-                                    <h4 className="text-xs font-bold text-white truncate leading-tight">{nowPlaying.title}</h4>
-                                    <p className="text-[10px] text-gray-400 truncate mb-1">{nowPlaying.artistName}</p>
-
-                                    <div className="mt-auto pt-1 border-t border-gray-700/50">
-                                        <div className="flex justify-center scale-75 origin-center">
-                                            <StarRating
-                                                rating={nowPlaying.stars}
-                                                onVote={handleStarVote}
-                                                className="gap-0.5"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Live Chat - Side Panel if visible */}
-                    {isChatVisible && (
-                        <div className="fixed right-4 top-28 bottom-[400px] w-80 z-20 pointer-events-auto">
-                            <LiveChat onDjMention={handleDjMention} profile={profile} />
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* Live Roast Call Ceremony */}
-            {roastCall && (
-                <RoastCallOverlay
-                    artistName={roastCall.artistName}
-                    phoneNumber={roastCall.phoneNumber}
-                    status={roastCall.status}
-                />
-            )}
+      {isTtsErrorMuted && showTtsErrorBanner && (
+        <div className="bg-red-900/50 border-y border-red-500/50 text-red-200 text-sm p-3 mx-4 sm:mx-8 mb-4 flex justify-between items-center animate-fade-in">
+          <p className="pr-4">
+            <strong>DJ Voice Unavailable:</strong> API quota may be reached. The
+            DJ script will continue to appear in the ticker below.
+          </p>
+          <button
+            onClick={() => setShowTtsErrorBanner(false)}
+            className="p-1 rounded-full hover:bg-red-800/50 flex-shrink-0"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
         </div>
-    );
+      )}
+
+      {/* Click to Start Overlay for Blocked Autoplay */}
+      {isAutoplayBlocked && !isLoading && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+          <button
+            onClick={() => {
+              const {
+                getBroadcastManager,
+              } = require("../services/globalBroadcastManager");
+              getBroadcastManager().play();
+              setIsAutoplayBlocked(false);
+            }}
+            className="bg-green-500 hover:bg-green-400 text-black font-bold py-4 px-8 rounded-full shadow-[0_0_30px_rgba(34,197,94,0.5)] transform hover:scale-105 transition-all flex items-center gap-3"
+          >
+            <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+            <span>TUNE IN NOW</span>
+          </button>
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="flex-grow flex items-center justify-center">
+          <Loader message="Tuning in..." />
+        </div>
+      ) : (
+        <div className="flex-grow flex flex-col min-h-0 px-4 sm:px-8">
+          {/* EMPTY MAIN SCREEN AREA - for future visualizations */}
+          <div className="flex-grow relative">
+            {/* Future: Add visualizations, events, etc here */}
+
+            {/* Station Offline State */}
+            {isPoolEmpty && !isLoading && (
+              <div className="absolute inset-0 flex items-center justify-center p-4 text-center animate-fade-in pointer-events-auto z-50">
+                <div className="bg-black/80 p-8 rounded-xl border border-red-500/30 backdrop-blur-md">
+                  <h3 className="text-3xl font-display text-red-500 mb-2">
+                    STATION OFFLINE
+                  </h3>
+                  <p className="text-lg text-gray-400">
+                    No signals detected in the Youniverse.
+                  </p>
+                  <p className="text-sm text-gray-500 mt-4">
+                    Upload a song to jumpstart the broadcast.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {isStandby && !isPoolEmpty && (
+              <div className="absolute inset-0 flex items-center justify-center p-4 text-center animate-fade-in pointer-events-none">
+                <div>
+                  <h3 className="text-2xl font-display text-yellow-400">
+                    Stand By
+                  </h3>
+                  <p className="text-lg text-gray-400">
+                    {currentDj.name} is cueing up the next round...
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 5 SMALL CARDS AT BOTTOM */}
+          <div className="flex gap-4 mt-8 pb-4 justify-between px-12 items-end">
+            {/* 1. DJ Booth - far left */}
+            <div className="w-80 flex-shrink-0">
+              <DjBooth profile={profile} />
+            </div>
+
+            {/* 2-4. The Box - 3 cards in the middle */}
+            {boxRound && boxRound.candidates.length > 0 && (
+              <TheBox
+                candidates={boxRound.candidates}
+                onVote={handleUserVote}
+                voteCounts={voteCounts}
+                userHasVoted={userHasVoted}
+                isVotingActive={radioState === "BOX_VOTING"}
+              />
+            )}
+
+            {/* 5. Now Playing - far right */}
+            {nowPlaying && (
+              <div className="w-44 flex-shrink-0 ml-auto group relative">
+                <div className="bg-gray-900/80 border border-green-500/30 rounded-lg p-2 h-full flex flex-col transition-all duration-300 hover:scale-105 hover:z-10 hover:shadow-[0_0_20px_rgba(34,197,94,0.3)]">
+                  <div className="text-[10px] text-green-400 mb-1 font-bold tracking-wider">
+                    ON AIR
+                  </div>
+                  <div className="relative w-full aspect-square rounded overflow-hidden mb-2">
+                    <img
+                      src={nowPlaying.coverArtUrl}
+                      alt={nowPlaying.title}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-1">
+                      <span className="text-[8px] text-white">
+                        Click for Lyrics
+                      </span>
+                    </div>
+                  </div>
+
+                  <h4 className="text-xs font-bold text-white truncate leading-tight">
+                    {nowPlaying.title}
+                  </h4>
+                  <p className="text-[10px] text-gray-400 truncate mb-1">
+                    {nowPlaying.artistName}
+                  </p>
+
+                  <div className="mt-auto pt-1 border-t border-gray-700/50">
+                    <div className="flex justify-center scale-75 origin-center">
+                      <StarRating
+                        rating={nowPlaying.stars}
+                        onVote={handleStarVote}
+                        className="gap-0.5"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Live Chat - Side Panel if visible */}
+          {isChatVisible && (
+            <div className="fixed right-4 top-28 bottom-[400px] w-80 z-20 pointer-events-auto">
+              <LiveChat onDjMention={handleDjMention} profile={profile} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Live Roast Call Ceremony */}
+      {roastCall && (
+        <RoastCallOverlay
+          artistName={roastCall.artistName}
+          phoneNumber={roastCall.phoneNumber}
+          status={roastCall.status}
+        />
+      )}
+    </div>
+  );
 };

@@ -4,158 +4,158 @@
  * Just plays audio. That's it.
  */
 
-import { Song } from '../types';
+import { Song } from "../types";
 
 type AudioEventCallback = (song: Song | null) => void;
 
 class SimpleAudioManager {
-    private audio: HTMLAudioElement;
-    private currentSong: Song | null = null;
-    private onSongEndCallback: AudioEventCallback | null = null;
-    private onSongStartCallback: AudioEventCallback | null = null;
+  private audio: HTMLAudioElement;
+  private currentSong: Song | null = null;
+  private onSongEndCallback: AudioEventCallback | null = null;
+  private onSongStartCallback: AudioEventCallback | null = null;
 
-    constructor() {
-        this.audio = new Audio();
-        this.audio.preload = 'auto';
+  constructor() {
+    this.audio = new Audio();
+    this.audio.preload = "auto";
 
-        // Handle song end
-        this.audio.addEventListener('ended', () => {
-            console.log('🎵 Song ended:', this.currentSong?.title);
-            if (this.onSongEndCallback) {
-                this.onSongEndCallback(this.currentSong);
-            }
-        });
+    // Handle song end
+    this.audio.addEventListener("ended", () => {
+      console.log("🎵 Song ended:", this.currentSong?.title);
+      if (this.onSongEndCallback) {
+        this.onSongEndCallback(this.currentSong);
+      }
+    });
 
-        // Handle errors
-        this.audio.addEventListener('error', (e) => {
-            console.error('❌ Audio error:', e);
-            console.error('Failed to load:', this.currentSong?.audioUrl);
-        });
+    // Handle errors
+    this.audio.addEventListener("error", (e) => {
+      console.error("❌ Audio error:", e);
+      console.error("Failed to load:", this.currentSong?.audioUrl);
+    });
 
-        // Handle successful load
-        this.audio.addEventListener('loadeddata', () => {
-            console.log('✅ Audio loaded:', this.currentSong?.title);
-        });
+    // Handle successful load
+    this.audio.addEventListener("loadeddata", () => {
+      console.log("✅ Audio loaded:", this.currentSong?.title);
+    });
 
-        // Handle play start
-        this.audio.addEventListener('play', () => {
-            console.log('▶️ Playing:', this.currentSong?.title);
-            if (this.onSongStartCallback) {
-                this.onSongStartCallback(this.currentSong);
-            }
-        });
+    // Handle play start
+    this.audio.addEventListener("play", () => {
+      console.log("▶️ Playing:", this.currentSong?.title);
+      if (this.onSongStartCallback) {
+        this.onSongStartCallback(this.currentSong);
+      }
+    });
+  }
+
+  /**
+   * Play a song
+   */
+  async play(song: Song): Promise<void> {
+    console.log("🎵 Loading song:", song.title, song.audioUrl);
+
+    this.currentSong = song;
+    this.audio.src = song.audioUrl;
+    this.audio.load();
+
+    try {
+      await this.audio.play();
+      console.log("✅ Playback started");
+    } catch (error) {
+      console.error("❌ Play failed:", error);
+      throw error;
     }
+  }
 
-    /**
-     * Play a song
-     */
-    async play(song: Song): Promise<void> {
-        console.log('🎵 Loading song:', song.title, song.audioUrl);
+  /**
+   * Pause playback
+   */
+  pause(): void {
+    this.audio.pause();
+  }
 
-        this.currentSong = song;
-        this.audio.src = song.audioUrl;
-        this.audio.load();
+  /**
+   * Resume playback
+   */
+  resume(): void {
+    this.audio.play().catch((err) => {
+      console.error("❌ Resume failed:", err);
+    });
+  }
 
-        try {
-            await this.audio.play();
-            console.log('✅ Playback started');
-        } catch (error) {
-            console.error('❌ Play failed:', error);
-            throw error;
-        }
-    }
+  /**
+   * Set volume (0-100)
+   */
+  setVolume(volume: number): void {
+    this.audio.volume = Math.max(0, Math.min(100, volume)) / 100;
+  }
 
-    /**
-     * Pause playback
-     */
-    pause(): void {
-        this.audio.pause();
-    }
+  /**
+   * Get current playback time
+   */
+  getCurrentTime(): number {
+    return this.audio.currentTime;
+  }
 
-    /**
-     * Resume playback
-     */
-    resume(): void {
-        this.audio.play().catch(err => {
-            console.error('❌ Resume failed:', err);
-        });
-    }
+  /**
+   * Get total duration
+   */
+  getDuration(): number {
+    return this.audio.duration || 0;
+  }
 
-    /**
-     * Set volume (0-100)
-     */
-    setVolume(volume: number): void {
-        this.audio.volume = Math.max(0, Math.min(100, volume)) / 100;
-    }
+  /**
+   * Seek to time (seconds)
+   */
+  seekTo(seconds: number): void {
+    this.audio.currentTime = seconds;
+  }
 
-    /**
-     * Get current playback time
-     */
-    getCurrentTime(): number {
-        return this.audio.currentTime;
-    }
+  /**
+   * Check if playing
+   */
+  isPlaying(): boolean {
+    return !this.audio.paused;
+  }
 
-    /**
-     * Get total duration
-     */
-    getDuration(): number {
-        return this.audio.duration || 0;
-    }
+  /**
+   * Get current song
+   */
+  getCurrentSong(): Song | null {
+    return this.currentSong;
+  }
 
-    /**
-     * Seek to time (seconds)
-     */
-    seekTo(seconds: number): void {
-        this.audio.currentTime = seconds;
-    }
+  /**
+   * Register callback for song end
+   */
+  onSongEnd(callback: AudioEventCallback): void {
+    this.onSongEndCallback = callback;
+  }
 
-    /**
-     * Check if playing
-     */
-    isPlaying(): boolean {
-        return !this.audio.paused;
-    }
+  /**
+   * Register callback for song start
+   */
+  onSongStart(callback: AudioEventCallback): void {
+    this.onSongStartCallback = callback;
+  }
 
-    /**
-     * Get current song
-     */
-    getCurrentSong(): Song | null {
-        return this.currentSong;
-    }
-
-    /**
-     * Register callback for song end
-     */
-    onSongEnd(callback: AudioEventCallback): void {
-        this.onSongEndCallback = callback;
-    }
-
-    /**
-     * Register callback for song start
-     */
-    onSongStart(callback: AudioEventCallback): void {
-        this.onSongStartCallback = callback;
-    }
-
-    /**
-     * Stop playback and clear
-     */
-    stop(): void {
-        this.audio.pause();
-        this.audio.currentTime = 0;
-        this.currentSong = null;
-    }
+  /**
+   * Stop playback and clear
+   */
+  stop(): void {
+    this.audio.pause();
+    this.audio.currentTime = 0;
+    this.currentSong = null;
+  }
 }
 
 // Singleton instance
 let instance: SimpleAudioManager | null = null;
 
 export function getAudioManager(): SimpleAudioManager {
-    if (!instance) {
-        instance = new SimpleAudioManager();
-        console.log('🎵 SimpleAudioManager initialized');
-    }
-    return instance;
+  if (!instance) {
+    instance = new SimpleAudioManager();
+    console.log("🎵 SimpleAudioManager initialized");
+  }
+  return instance;
 }
 
 export default SimpleAudioManager;

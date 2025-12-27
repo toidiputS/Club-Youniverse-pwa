@@ -11,7 +11,7 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  INSERT INTO public.profiles (user_id, email, name, is_artist, is_vip, is_admin)
+  INSERT INTO public.profiles (user_id, email, name, is_artist, is_premium, is_admin)
   VALUES (
     NEW.id,
     NEW.email,

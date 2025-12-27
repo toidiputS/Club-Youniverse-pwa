@@ -17,7 +17,7 @@ declare global {
   }
 }
 
-import type { Session } from '@supabase/supabase-js';
+import type { Session } from "@supabase/supabase-js";
 
 // --- Auth ---
 export type { Session };
@@ -42,7 +42,6 @@ export interface Profile {
   };
 }
 
-
 // --- Core Data Models ---
 // These interfaces represent the main data entities of the application, like songs, users, and chat messages.
 
@@ -51,14 +50,14 @@ export interface Song {
   uploaderId: string;
   title: string;
   artistName: string;
-  source: 'suno' | 'producer.ai' | 'mubert' | 'upload';
+  source: "suno" | "producer.ai" | "mubert" | "upload";
   audioUrl: string;
   durationSec: number;
   stars: number;
   boxRoundsSeen: number;
   boxRoundsLost: number;
   boxAppearanceCount: number; // New: Tracks how many times a song has appeared in The Box without being chosen
-  status: 'pool' | 'in_box' | 'now_playing' | 'graveyard' | 'debut'; // Added 'debut' status
+  status: "pool" | "in_box" | "now_playing" | "graveyard" | "debut"; // Added 'debut' status
   coverArtUrl?: string;
   lyrics?: string;
   moods?: string[];
@@ -102,13 +101,12 @@ export interface ChatMessage {
 export interface DjProfile {
   name: string;
   personality: string;
-  voiceName: 'Fenrir' | 'Kore' | 'Charon' | 'Puck'; // Add other valid voice names here
+  voiceName: "Fenrir" | "Kore" | "Charon" | "Puck"; // Add other valid voice names here
 }
-
 
 export interface DJEvent {
   id: string;
-  type: 'ad_read' | 'promo' | 'station_id' | 'zero_star_roast';
+  type: "ad_read" | "promo" | "station_id" | "zero_star_roast";
   script: string;
   scheduledAt: string; // ISO date string
   playedAt?: string; // ISO date string
@@ -117,38 +115,53 @@ export interface DJEvent {
 // --- App State & Navigation ---
 // Types related to the application's UI state, navigation, and status.
 
-export type View = 'studio' | 'radio' | 'song-submission' | 'song-library' | 'leaderboard' | 'graveyard' | 'album-cover' | 'music-video' | 'gallery' | 'profile';
+export type View =
+  | "studio"
+  | "radio"
+  | "song-submission"
+  | "song-library"
+  | "leaderboard"
+  | "graveyard"
+  | "album-cover"
+  | "music-video"
+  | "gallery"
+  | "profile";
 
 // A constant object for tracking the status of the music video generator.
 export const AppStatus = {
-  API_KEY_CHECKING: 'API_KEY_CHECKING',
-  API_KEY_NEEDED: 'API_KEY_NEEDED',
-  UPLOAD: 'UPLOAD',
-  GENERATING_STORYBOARD: 'GENERATING_STORYBOARD',
-  GENERATING_MEDIA: 'GENERATING_MEDIA',
-  COMPLETE: 'COMPLETE',
+  API_KEY_CHECKING: "API_KEY_CHECKING",
+  API_KEY_NEEDED: "API_KEY_NEEDED",
+  UPLOAD: "UPLOAD",
+  GENERATING_STORYBOARD: "GENERATING_STORYBOARD",
+  GENERATING_MEDIA: "GENERATING_MEDIA",
+  COMPLETE: "COMPLETE",
 } as const;
 
-export type AppState = typeof AppStatus[keyof typeof AppStatus];
+export type AppState = (typeof AppStatus)[keyof typeof AppStatus];
 
 // Represents the different states of the live radio simulation.
-export type RadioState = 'DJ_BANTER_INTRO' | 'BOX_VOTING' | 'DJ_BANTER_OUTRO' | 'NOW_PLAYING' | 'DJ_TALKING';
+export type RadioState =
+  | "DJ_BANTER_INTRO"
+  | "BOX_VOTING"
+  | "DJ_BANTER_OUTRO"
+  | "NOW_PLAYING"
+  | "DJ_TALKING";
 
 // --- UI & Settings ---
 // Interfaces for user-configurable settings and UI elements.
 
-export type ThemeName = 'dark' | 'light' | 'gradient1' | 'gradient2';
+export type ThemeName = "dark" | "light" | "gradient1" | "gradient2";
 
 export interface Settings {
   theme: ThemeName;
   customCardBackground: string | null;
-  defaultAspectRatio: '16:9' | '9:16' | '1:1' | '4:3';
+  defaultAspectRatio: "16:9" | "9:16" | "1:1" | "4:3";
   defaultStyleKeywords: string;
 }
 
 export interface GalleryItem {
   id: string;
-  type: 'music-video' | 'album-cover';
+  type: "music-video" | "album-cover";
   title: string;
   artist?: string;
   url: string;
@@ -165,30 +178,34 @@ export interface SongDetails {
   artist: string;
   lyrics: string;
   audioFile: File;
-  aspectRatio: '16:9' | '9:16' | '1:1' | '4:3';
-  pacing: 'default' | 'slow' | 'fast';
+  aspectRatio: "16:9" | "9:16" | "1:1" | "4:3";
+  pacing: "default" | "slow" | "fast";
   styleKeywords: string;
   duration?: number; // Optional duration in seconds, calculated on the frontend.
-  source?: 'suno' | 'producer.ai' | 'mubert' | 'upload'; // Optional source tracking
+  source?: "suno" | "producer.ai" | "mubert" | "upload"; // Optional source tracking
 }
 
 export interface StoryboardScene {
   scene: number;
-  type: 'video' | 'image';
+  type: "video" | "image";
   description: string;
   prompt: string;
 }
 
 export interface GeneratedMedia {
   scene: number;
-  type: 'video' | 'image';
-  status: 'pending' | 'generating' | 'complete' | 'failed';
+  type: "video" | "image";
+  status: "pending" | "generating" | "complete" | "failed";
   url: string | null;
   error?: string;
 }
 
-export type GenerationStage = 'INITIAL' | 'VIDEO_BLOCK_1' | 'IMAGE_BLOCK' | 'VIDEO_BLOCK_2' | 'DONE';
-
+export type GenerationStage =
+  | "INITIAL"
+  | "VIDEO_BLOCK_1"
+  | "IMAGE_BLOCK"
+  | "VIDEO_BLOCK_2"
+  | "DONE";
 
 // --- Server-side Logic & API Contracts ---
 // These interfaces define the shape of data for backend logic, even if the backend is mocked.
@@ -212,8 +229,22 @@ export interface SelectBoxCandidatesOutput {
 }
 
 export interface DjBanterScriptInput {
-  event: 'intro' | 'outro' | 'new_box_round' | 'winner_announcement' | 'graveyard_roast' | 'filler' | 'weird_news_segment' | 'user_mention' | 'premium_cta' | 'new_artist_shoutout' | 'dj_shift_change' | 'debut_song_outro' | 'empty_queue_banter' | 'system_explainer';
-  song?: { title: string; artistName: string, finalRating?: number };
+  event:
+    | "intro"
+    | "outro"
+    | "new_box_round"
+    | "winner_announcement"
+    | "graveyard_roast"
+    | "filler"
+    | "weird_news_segment"
+    | "user_mention"
+    | "premium_cta"
+    | "new_artist_shoutout"
+    | "dj_shift_change"
+    | "debut_song_outro"
+    | "empty_queue_banter"
+    | "system_explainer";
+  song?: { title: string; artistName: string; finalRating?: number };
   djProfile?: DjProfile; // The profile of the DJ who is speaking
   context?: any; // e.g., "It's a close race!" or a news story
 }
@@ -227,17 +258,18 @@ export interface DjBanterScriptOutput {
 }
 
 // The unified DJ audio queue now includes the DJ's name for TTS items.
-export type DjQueueItem = {
-  id: string;
-  type: 'tts';
-  content: string; // The text to be synthesized
-  djName: string; // The name of the DJ who is speaking
-} | {
-  id: string;
-  type: 'url';
-  content: string; // The URL of the pre-recorded audio file
-};
-
+export type DjQueueItem =
+  | {
+      id: string;
+      type: "tts";
+      content: string; // The text to be synthesized
+      djName: string; // The name of the DJ who is speaking
+    }
+  | {
+      id: string;
+      type: "url";
+      content: string; // The URL of the pre-recorded audio file
+    };
 
 export interface WeirdNewsOutput {
   headline: string;
@@ -251,7 +283,7 @@ export interface WeirdNewsOutput {
 export interface ZeroStarCallCopyInput {
   artistName: string;
   songTitle: string;
-  tone: 'funny_roast' | 'gentle_condolences';
+  tone: "funny_roast" | "gentle_condolences";
 }
 export interface ZeroStarCallCopyOutput {
   callScript: string;
@@ -313,11 +345,11 @@ export interface VideoStylePlanOutput {
 // Types for the lyric display system.
 
 export enum AnimationType {
-  BOUNCE = 'bounce',
-  SHAKE = 'shake',
-  GLITCH = 'glitch',
-  SLIDE = 'slide',
-  EXPLODE = 'explode'
+  BOUNCE = "bounce",
+  SHAKE = "shake",
+  GLITCH = "glitch",
+  SLIDE = "slide",
+  EXPLODE = "explode",
 }
 
 export interface ChoreographedLine {

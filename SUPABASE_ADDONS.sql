@@ -27,6 +27,16 @@ begin
     if not exists (select 1 from information_schema.columns where table_name = 'profiles' and column_name = 'stats') then
         alter table public.profiles add column stats jsonb default '{"plays": 0, "uploads": 0, "votes_cast": 0, "graveyard_count": 0}'::jsonb;
     end if;
+
+    -- Add is_premium if missing
+    if not exists (select 1 from information_schema.columns where table_name = 'profiles' and column_name = 'is_premium') then
+        alter table public.profiles add column is_premium boolean default false;
+    end if;
+
+    -- Add roast_consent if missing
+    if not exists (select 1 from information_schema.columns where table_name = 'profiles' and column_name = 'roast_consent') then
+        alter table public.profiles add column roast_consent boolean default false;
+    end if;
 end $$;
 
 -- ==========================================

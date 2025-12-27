@@ -13,7 +13,8 @@ create table public.profiles (
   name text, -- Display name (Artist Name)
   phone_number text, -- Required for Artists
   is_artist boolean default false,
-  is_vip boolean default false,
+  is_premium boolean default false,
+  roast_consent boolean default false,
   is_admin boolean default false, -- For DJ Booth access
   avatar_url text,
   last_debut_at timestamptz, -- Tracks 24h rule for debuts

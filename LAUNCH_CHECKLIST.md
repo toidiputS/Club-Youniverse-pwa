@@ -3,6 +3,7 @@
 ## 📋 Current Status Analysis
 
 ### ✅ **COMPLETED** Features
+
 - [x] User authentication (Supabase)
 - [x] Song upload system (with file storage)
 - [x] Basic radio player infrastructure
@@ -23,6 +24,7 @@
 - [x] 24-hour second chance rule
 
 ### 🚧 **IN PROGRESS** / Needs Completion
+
 - [ ] **The Box voting system** - UI exists but needs full 3-song vote flow
 - [ ] **DJ Booth controls** - Interface exists but needs full functionality
 - [ ] **Song download feature** - Not yet implemented
@@ -30,6 +32,7 @@
 - [ ] **Actual TTS/call integration** for zero-star events
 
 ### ❌ **NOT STARTED**
+
 - [ ] Payment/subscription system (VIP $10/mo)
 - [ ] User account linking to Producer.ai/Suno
 - [ ] Admin moderation tools (timeout, ban, silencing)
@@ -47,9 +50,11 @@
 ## 🎯 PRIORITY 1: Core Radio Experience (Make it Usable NOW)
 
 ### **Issue #1: Complete The Box Voting Flow**
+
 **Current State:** TheBox component displays 3 songs, allows voting, but the full cycle hasn't been tested.
 
 **Action Items:**
+
 1. ✅ Verify vote tallying works correctly
 2. ✅ Test 3-round elimination (songs that lose 3x drop a star)
 3. ✅ Ensure winner plays after voting ends
@@ -58,6 +63,7 @@
 6. ✅ (**FIXED**) Songs might not be rotating back to pool correctly
 
 **Test Case:**
+
 1. Upload 5+ songs
 2. Let radio run through 3 complete box rounds
 3. Verify a song that loses 3x drops from 5 stars to 4 stars
@@ -66,9 +72,11 @@
 ---
 
 ### **Issue #2: Song Download Feature**
+
 **Current State:** Not implemented.
 
 **Action Items:**
+
 1. Add download button to `NowPlaying` component
 2. Add download button to `SongLibrary` for user's own songs
 3. Create `downloadSong(song: Song)` function that:
@@ -81,9 +89,11 @@
 ---
 
 ### **Issue #3: Fix DJ Booth Controls**
+
 **Current State:** Booth unlocks with password "youniverse" but controls are placeholders.
 
 **Action Items:**
+
 1. **Voice On/Off** - ✅ Already implemented (`isTtsUserMuted`)
 2. **Pop-out Control 1** → Make this "Skip Current Song"
 3. **Pop-out Control 2** → Make this "Force New Box Round"
@@ -97,12 +107,14 @@
 
 ## 💰 PRIORITY 2: Cost Optimization (LLM Usage)
 
-### **Problem:** 
+### **Problem:**
+
 Running Gemini TTS every 3-8 minutes 24/7 = **EXPENSIVE** 💸
 
 ### **Solutions (Choose Multiple):**
 
 #### **Option A: Hybrid AI + Pre-recorded System** ⭐ RECOMMENDED
+
 **Cost Savings: ~80%**
 
 1. **Create a "DJ Line Bank"** - Pre-generate 500+ DJ one-liners
@@ -119,6 +131,7 @@ Running Gemini TTS every 3-8 minutes 24/7 = **EXPENSIVE** 💸
    - Everything else = pre-recorded bank
 
 **Implementation:**
+
 ```typescript
 // services/djLineBank.ts
 const DJ_LINES = {
@@ -136,7 +149,7 @@ const DJ_LINES = {
     "You're listening to Club Youniverse, where YOU are the star!",
     "Don't forget, VIP members get priority placement!",
     // ... 200 more
-  ]
+  ],
 };
 
 export const getRandomLine = (category: string) => {
@@ -146,6 +159,7 @@ export const getRandomLine = (category: string) => {
 ```
 
 **Cost Breakdown:**
+
 - Pre-generation: $2-5 one-time
 - Live personalized events: ~$0.50/day (assuming 50 personalized lines/day)
 - **Monthly Cost: ~$15-20 vs. $200+**
@@ -153,21 +167,25 @@ export const getRandomLine = (category: string) => {
 ---
 
 #### **Option B: Self-Hosted TTS** (Free but Lower Quality)
+
 **Cost Savings: ~95%**
 
 Use **Piper TTS** or **Coqui TTS** (open-source, runs locally)
 
 **Pros:**
+
 - Completely free
 - No API limits
 - Runs on your server
 
 **Cons:**
+
 - Voice quality is lower than Gemini
 - Requires server setup
 - More technical complexity
 
 **Implementation:**
+
 - Set up Piper TTS on a cheap VPS ($5/mo DigitalOcean droplet)
 - Create API endpoint: `/api/tts?text=...&voice=...`
 - Swap Gemini TTS calls with your endpoint
@@ -175,6 +193,7 @@ Use **Piper TTS** or **Coqui TTS** (open-source, runs locally)
 ---
 
 #### **Option C: Reduce Frequency + Smart Scheduling**
+
 **Cost Savings: ~60%**
 
 1. **Longer gaps between DJ chatter**
@@ -194,9 +213,11 @@ Use **Piper TTS** or **Coqui TTS** (open-source, runs locally)
 ---
 
 #### **Option D: Tiered AI Quality**
+
 **Cost Savings: ~40%**
 
 Use different models based on importance:
+
 - **Critical events** (new artist, zero-star roast): `gemini-2.5-flash-tts` (high quality)
 - **Regular banter**: Cheaper alternative or pre-recorded
 - **Filler**: Always pre-recorded
@@ -215,9 +236,11 @@ Use different models based on importance:
 ## 🎯 PRIORITY 3: Monetization Readiness
 
 ### **VIP System ($10/mo)**
+
 **Current State:** `is_premium` flag exists in database but no payment flow.
 
 **Action Items:**
+
 1. Integrate **Stripe** for subscriptions
 2. Create `/api/create-subscription` endpoint
 3. Add "Upgrade to VIP" button in multiple places:
@@ -229,6 +252,7 @@ Use different models based on importance:
    - VIP: Full access
 
 **Features to Gate:**
+
 - ✅ Song uploads
 - ✅ Box voting
 - ✅ Live chat
@@ -242,9 +266,11 @@ Use different models based on importance:
 ## 🐛 CRITICAL BUGS TO FIX
 
 ### **Bug #1: Box Voting State Management**
+
 **Symptom:** Songs might not properly return to pool after box rounds.
 
 **Fix:**
+
 - ✅ **COMPLETED**: Added database persistence for `boxAppearanceCount`, `boxRoundsLost`
 - ✅ **COMPLETED**: Updated `Radio.tsx` to handle persistence directly
 - ✅ **COMPLETED**: Verified `supabaseSongService.ts` handles the updates
@@ -252,9 +278,11 @@ Use different models based on importance:
 ---
 
 ### **Bug #4: Real-Time Synchronization (Split Reality)**
+
 **Symptom:** Users hear different "next songs" because client-side logic drifts.
 
 **Fix:**
+
 - [ ] Implement Supabase Real-Time subscriptions in `App.tsx`
 - [ ] Push "Now Playing" updates to all connected clients
 - [ ] Ensure all listeners sync to the database state on song change
@@ -262,29 +290,35 @@ Use different models based on importance:
 ---
 
 ### **Bug #2: Zero-Star Roast System**
+
 **Current State:** Logic exists but no actual phone call/SMS integration.
 
 **Temporary Solution (Launch):**
+
 - Just play the roast message in the radio
 - Display popup to user in the app
 - Email the user instead of calling
 
 **Future Solution:**
+
 - Integrate **Twilio** for actual calls/SMS
 - Cost: ~$0.02/minute for calls, $0.01/SMS
 
 ---
 
 ### **Bug #3: Song Duration Detection**
+
 **Issue:** App requires manual duration input during upload.
 
 **Fix:**
+
 - Add auto-detection using Web Audio API:
+
 ```typescript
 const getAudioDuration = (file: File): Promise<number> => {
   return new Promise((resolve) => {
     const audio = new Audio();
-    audio.addEventListener('loadedmetadata', () => {
+    audio.addEventListener("loadedmetadata", () => {
       resolve(audio.duration);
     });
     audio.src = URL.createObjectURL(file);
@@ -297,24 +331,29 @@ const getAudioDuration = (file: File): Promise<number> => {
 ## 📅 LAUNCH TIMELINE
 
 ### **Week 1: MVP (Minimum Viable Product)**
+
 **Goal: Get it running well enough to share**
 
 **Day 1-2:**
+
 - [ ] Fix Box voting persistence bugs
 - [ ] Add song download button
 - [ ] Complete DJ Booth controls
 
 **Day 3-4:**
+
 - [ ] Build DJ Line Bank (500+ lines)
 - [ ] Implement hybrid AI system (Option A)
 - [ ] Test full radio cycle (24-hour test run)
 
 **Day 5:**
+
 - [ ] Add phone number field to user profiles
 - [ ] Implement email version of zero-star roast
 - [ ] Test new artist debut flow
 
 **Day 6-7:**
+
 - [ ] Polish UI/UX issues
 - [ ] Add loading states everywhere
 - [ ] Write user onboarding guide
@@ -323,19 +362,23 @@ const getAudioDuration = (file: File): Promise<number> => {
 ---
 
 ### **Week 2: Monetization & Scaling**
+
 **Goal: Add payments and prepare for growth**
 
 **Day 8-10:**
+
 - [ ] Integrate Stripe subscriptions
 - [ ] Implement free vs. VIP gates
 - [ ] Create pricing page
 
 **Day 11-12:**
+
 - [ ] Set up analytics (track plays, votes, uploads)
 - [ ] Add moderation tools (DJ Booth admin panel)
 - [ ] Implement ban/timeout system
 
 **Day 13-14:**
+
 - [ ] Performance optimization
 - [ ] SEO and marketing site
 - [ ] **PUBLIC LAUNCH** 🚀
@@ -387,12 +430,14 @@ const getAudioDuration = (file: File): Promise<number> => {
 ## 📊 Success Metrics to Track
 
 **Week 1 Goals:**
+
 - [ ] 50 songs uploaded
 - [ ] 20 active VIP users
 - [ ] 100+ total users
 - [ ] 24/7 radio uptime (>95%)
 
 **Month 1 Goals:**
+
 - [ ] 500 songs in library
 - [ ] 100 VIP subscribers ($1,000 MRR)
 - [ ] 1,000+ total users
@@ -412,18 +457,24 @@ const getAudioDuration = (file: File): Promise<number> => {
 ## 💬 Discussion Points
 
 ### **Question 1: DJ Line Generation**
+
 Do you want me to:
+
 - A) Generate 500 DJ lines right now using Gemini?
 - B) Show you how to build the hybrid system first?
 - C) Both?
 
 ### **Question 2: Self-Hosted TTS**
+
 Are you open to:
+
 - Running your own TTS server (Piper/Coqui)?
 - OR stick with Gemini but use the line bank approach?
 
 ### **Question 3: Minimum Stars for Box Entry**
+
 Should songs need a minimum star rating to enter The Box?
+
 - Example: Songs with <2 stars can't enter The Box anymore
 - This prevents graveyard songs from clogging the system
 

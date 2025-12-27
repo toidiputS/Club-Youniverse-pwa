@@ -55,6 +55,7 @@
 4. ✅ **BOOTH UNLOCKED!**
 
 You should now see:
+
 - Status display showing radio state
 - 5 control buttons
 - Volume slider at bottom
@@ -76,6 +77,7 @@ You should now see:
    - Or use the same MP3 with different titles
 
 **⚠️ Need test MP3s?**
+
 - Download free music from: https://www.bensound.com/royalty-free-music
 - Or use any MP3 you have locally
 
@@ -90,8 +92,9 @@ Once you have 5+ songs uploaded:
 3. Watch the radio cycle automatically:
 
 **Expected Flow:**
+
 ```
-DJ Banter (Intro) 
+DJ Banter (Intro)
     ↓
 The Box (3 songs, 20 seconds voting)
     ↓
@@ -111,30 +114,35 @@ DJ Banter (Outro)
 While the radio is running, test each control:
 
 #### **A) Skip Current Song**
+
 1. Wait for a song to start playing (NOW_PLAYING state)
 2. In DJ Booth, click **"Skip Current Song"**
 3. ✅ **Expected:** Song stops, radio moves to next round immediately
 
 #### **B) Force New Box Round**
+
 1. During ANY state, click **"Force New Box Round"**
 2. ✅ **Expected:** Radio resets, new Box round starts with 3 new songs
 
 #### **C) Custom DJ Message**
+
 1. Click **"Custom DJ Message"**
 2. Type something like: "Hey Youniverse, this is a test message!"
 3. Click **"Send to DJ"**
-4. ✅ **Expected:** 
+4. ✅ **Expected:**
    - DJ adds your message to the queue
    - You'll see it appear in the DJ Transcript ticker at bottom
    - DJ voice should speak it (if Voice is ON)
 
 #### **D) DJ Voice On/Off**
+
 1. Click **"DJ VOICE OFF"** to mute
 2. ✅ **Expected:** Button turns RED, DJ stops speaking
 3. Click again to turn back ON
 4. ✅ **Expected:** Button turns GREEN, DJ voice resumes
 
 #### **E) Master Volume**
+
 1. Drag the volume slider
 2. ✅ **Expected:** Music and DJ volume changes in real-time
 3. Percentage displays (0-100%)
@@ -172,18 +180,22 @@ This is the core feature we need to verify!
 While testing, watch for these potential bugs:
 
 ### **Issue #1: Box Appearance Counter Not Persisting**
+
 - **Symptom:** Red dots reset after refresh
 - **Fix needed:** Database needs to save `boxAppearanceCount`
 
 ### **Issue #2: Songs Not Returning to Pool**
+
 - **Symptom:** Same songs keep appearing in Box
 - **Fix needed:** Status update logic in Radio.tsx
 
 ### **Issue #3: Star Changes Not Saving**
+
 - **Symptom:** Star ratings reset to 5 after refresh
 - **Fix needed:** Database update on win/loss
 
 ### **Issue #4: Skip Song Doesn't Trigger Next Round**
+
 - **Symptom:** After skip, radio gets stuck
 - **Fix needed:** Add `startNextRound()` call after skip
 
@@ -194,6 +206,7 @@ While testing, watch for these potential bugs:
 Before we call this "production ready", we need:
 
 ✅ **DJ Booth Controls**
+
 - [ ] All 5 buttons work correctly
 - [ ] Status display shows accurate info
 - [ ] Volume control affects audio
@@ -201,6 +214,7 @@ Before we call this "production ready", we need:
 - [ ] Lock/unlock works properly
 
 ✅ **Radio Flow**
+
 - [ ] Box round starts with 3 songs
 - [ ] Voting lasts 20 seconds
 - [ ] Winner plays full song
@@ -208,12 +222,14 @@ Before we call this "production ready", we need:
 - [ ] No infinite loops or crashes
 
 ✅ **Star System**
+
 - [ ] New songs start with 5 stars
 - [ ] Box winner gains +1 star (max 10)
 - [ ] 3x loser drops -1 star
 - [ ] Star changes persist after refresh
 
 ✅ **The Box Mechanics**
+
 - [ ] 3 songs appear each round
 - [ ] Red dots track attempts (0-3)
 - [ ] Songs can appear multiple times until 3 strikes
@@ -226,11 +242,13 @@ Before we call this "production ready", we need:
 Once you've tested and confirmed everything works:
 
 **Priority fixes** (if any bugs found):
+
 1. Fix box appearance counter persistence
 2. Fix star rating database updates
 3. Add database indexes for performance
 
 **Then move to:**
+
 1. Song download feature (easy 1-hour add)
 2. DJ Line Bank system (cost optimization)
 3. Stripe integration (monetization)

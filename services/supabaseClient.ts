@@ -4,7 +4,7 @@
  * across the application for authentication and database interactions.
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from "@supabase/supabase-js";
 
 // Vercel and other hosting providers inject environment variables.
 // Vite requires the 'VITE_' prefix to expose variables to the client-side code.
@@ -14,8 +14,11 @@ import { createClient } from '@supabase/supabase-js';
 const env = import.meta.env || ({} as any);
 
 // Use environment variables if they are available, otherwise fall back to the user's project ID.
-const supabaseUrl = env.VITE_SUPABASE_URL || "https://ktfezfnkghtwbkmhxdyd.supabase.co";
-const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY || "sb_publishable_Cpca6J3OdRz7czjQJN-KeQ_RNFc9QQU";
+const supabaseUrl =
+  env.VITE_SUPABASE_URL || "https://ktfezfnkghtwbkmhxdyd.supabase.co";
+const supabaseAnonKey =
+  env.VITE_SUPABASE_ANON_KEY ||
+  "sb_publishable_Cpca6J3OdRz7czjQJN-KeQ_RNFc9QQU";
 
 // The Supabase client is now guaranteed to be created.
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);

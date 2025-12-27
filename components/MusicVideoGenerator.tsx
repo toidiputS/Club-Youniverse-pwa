@@ -4,30 +4,54 @@
  * media clip generation (in a managed queue), and final video combination.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { UploadScreen } from './UploadScreen';
-import { ProductionStudio } from './ProductionStudio';
-import { Loader } from './Loader';
-import { analyzeSongAndGenerateStoryboard, generateVideoClip, generateImage } from '../services/geminiService';
-import { combineMedia } from '../services/videoCombiner';
-import type { StoryboardScene, GeneratedMedia, AppState, SongDetails, GenerationStage, GalleryItem, Profile } from '../types';
-import { AppStatus } from '../types';
+import React, { useState, useEffect, useCallback } from "react";
+import { UploadScreen } from "./UploadScreen";
+import { ProductionStudio } from "./ProductionStudio";
+import { Loader } from "./Loader";
+import {
+  analyzeSongAndGenerateStoryboard,
+  generateVideoClip,
+  generateImage,
+} from "../services/geminiService";
+import { combineMedia } from "../services/videoCombiner";
+import type {
+  StoryboardScene,
+  GeneratedMedia,
+  AppState,
+  SongDetails,
+  GenerationStage,
+  GalleryItem,
+  Profile,
+} from "../types";
+import { AppStatus } from "../types";
 
 interface MusicVideoGeneratorProps {
   onBackToStudio: () => void;
-  onCreationComplete: (item: Omit<GalleryItem, 'id'>) => void;
-  onSongSubmitted: (details: { title: string; artist: string; audioFile: File; durationSec: number; source?: 'suno' | 'producer.ai' | 'mubert' | 'upload' }) => void;
+  onCreationComplete: (item: Omit<GalleryItem, "id">) => void;
+  onSongSubmitted: (details: {
+    title: string;
+    artist: string;
+    audioFile: File;
+    durationSec: number;
+    source?: "suno" | "producer.ai" | "mubert" | "upload";
+  }) => void;
   profile: Profile;
   setProfile: React.Dispatch<React.SetStateAction<Profile | null>>;
 }
 
 // List of Veo models to use for video generation, allowing for rotation to manage rate limits.
 const VEO_MODELS = [
-  'veo-3.1-fast-generate-preview',
-  'veo-3.1-generate-preview',
+  "veo-3.1-fast-generate-preview",
+  "veo-3.1-generate-preview",
 ];
 
-export const MusicVideoGenerator: React.FC<MusicVideoGeneratorProps> = ({ onBackToStudio, onCreationComplete, onSongSubmitted, profile, setProfile }) => {
+export const MusicVideoGenerator: React.FC<MusicVideoGeneratorProps> = ({
+  onBackToStudio,
+  onCreationComplete,
+  onSongSubmitted,
+  profile,
+  setProfile,
+}) => {
   // State for the entire generation flow.
   const [appStatus, setAppStatus] = useState<AppState>(AppStatus.UPLOAD);
   const [songDetails, setSongDetails] = useState<SongDetails | null>(null);
@@ -40,14 +64,17 @@ export const MusicVideoGenerator: React.FC<MusicVideoGeneratorProps> = ({ onBack
   // State for managing the generation queue.
   const [isQueueRunning, setIsQueueRunning] = useState(false);
   const [lastBatchStart, setLastBatchStart] = useState(0); // Tracks time for API cooldowns.
-  const [generationStatusMessage, setGenerationStatusMessage] = useState("Production in progress...");
-  const [generationStage, setGenerationStage] = useState<GenerationStage>('INITIAL');
+  const [generationStatusMessage, setGenerationStatusMessage] = useState(
+    "Production in progress...",
+  );
+  const [generationStage, setGenerationStage] =
+    useState<GenerationStage>("INITIAL");
   const [nextVideoModelIndex, setNextVideoModelIndex] = useState(0); // Rotates through VEO_MODELS.
 
   // Cleanup effect to revoke object URLs and prevent memory leaks.
   useEffect(() => {
     return () => {
-      generatedMedia.forEach(media => {
+      generatedMedia.forEach((media) => {
         if (media.url) URL.revokeObjectURL(media.url);
       });
       if (finalVideoUrl) {
@@ -66,10 +93,10 @@ export const MusicVideoGenerator: React.FC<MusicVideoGeneratorProps> = ({ onBack
     setIsCombining(false);
     setIsQueueRunning(false);
     setLastBatchStart(0);
-    setGenerationStage('INITIAL');
+    setGenerationStage("INITIAL");
     setNextVideoModelIndex(0);
     setGenerationStatusMessage("Production in progress...");
-  }
+  };
 
   /**
    * Handles the submission from the UploadScreen.
@@ -86,28 +113,38 @@ export const MusicVideoGenerator: React.FC<MusicVideoGeneratorProps> = ({ onBack
       artist: details.artist,
       audioFile: details.audioFile,
       durationSec: details.duration || 0,
-      source: details.source
+      source: details.source,
     });
 
     if (!details.duration) {
-      setError("Could not determine audio duration. Please try uploading the file again.");
+      setError(
+        "Could not determine audio duration. Please try uploading the file again.",
+      );
       setAppStatus(AppStatus.UPLOAD);
       return;
     }
 
     try {
-      const scenes = await analyzeSongAndGenerateStoryboard(details, details.duration);
+      const scenes = await analyzeSongAndGenerateStoryboard(
+        details,
+        details.duration,
+      );
       setStoryboard(scenes);
-      setGeneratedMedia(scenes.map(scene => ({
-        scene: scene.scene,
-        type: scene.type,
-        status: 'pending',
-        url: null,
-      })));
+      setGeneratedMedia(
+        scenes.map((scene) => ({
+          scene: scene.scene,
+          type: scene.type,
+          status: "pending",
+          url: null,
+        })),
+      );
       setAppStatus(AppStatus.GENERATING_MEDIA);
     } catch (e: any) {
       console.error(e);
-      setError(e.message || 'Failed to generate storyboard. Please check the console for details.');
+      setError(
+        e.message ||
+          "Failed to generate storyboard. Please check the console for details.",
+      );
       setAppStatus(AppStatus.UPLOAD);
     }
   };
@@ -119,24 +156,31 @@ export const MusicVideoGenerator: React.FC<MusicVideoGeneratorProps> = ({ onBack
    */
   const manageGenerationQueue = useCallback(async () => {
     setIsQueueRunning(true);
-    const getPending = (type: 'video' | 'image') => storyboard.filter(s => s.type === type && generatedMedia.find(m => m.scene === s.scene)?.status === 'pending');
+    const getPending = (type: "video" | "image") =>
+      storyboard.filter(
+        (s) =>
+          s.type === type &&
+          generatedMedia.find((m) => m.scene === s.scene)?.status === "pending",
+      );
 
     // If nothing is pending, the generation is complete.
-    if (generatedMedia.every(m => m.status !== 'pending')) {
+    if (generatedMedia.every((m) => m.status !== "pending")) {
       setAppStatus(AppStatus.COMPLETE);
       setGenerationStatusMessage("All assets are ready!");
       setIsQueueRunning(false);
       return;
     }
 
-    const aspectRatio = songDetails?.aspectRatio || '16:9';
+    const aspectRatio = songDetails?.aspectRatio || "16:9";
     const COOLDOWN = 61000; // ~1 minute cooldown for video generation APIs.
     const timeSince = Date.now() - lastBatchStart;
 
     // Enforce cooldown between video batches.
     if (lastBatchStart !== 0 && timeSince < COOLDOWN) {
       const waitTime = COOLDOWN - timeSince;
-      setGenerationStatusMessage(`Waiting ${Math.round(waitTime / 1000)}s for API cooldown...`);
+      setGenerationStatusMessage(
+        `Waiting ${Math.round(waitTime / 1000)}s for API cooldown...`,
+      );
       setTimeout(() => setIsQueueRunning(false), waitTime);
       return;
     }
@@ -144,90 +188,141 @@ export const MusicVideoGenerator: React.FC<MusicVideoGeneratorProps> = ({ onBack
     try {
       // Logic to process different stages (videos, then images, then remaining videos).
       let currentStage = generationStage;
-      if (currentStage === 'INITIAL') {
-        const pendingVideos = getPending('video');
-        currentStage = pendingVideos.length > 0 ? 'VIDEO_BLOCK_1' : 'IMAGE_BLOCK';
+      if (currentStage === "INITIAL") {
+        const pendingVideos = getPending("video");
+        currentStage =
+          pendingVideos.length > 0 ? "VIDEO_BLOCK_1" : "IMAGE_BLOCK";
         setGenerationStage(currentStage);
       }
 
       // Process the first batch of videos.
-      if (currentStage === 'VIDEO_BLOCK_1') {
-        const pendingVideos = getPending('video');
-        if (pendingVideos.length === 0 || nextVideoModelIndex >= VEO_MODELS.length) {
-          setGenerationStage('IMAGE_BLOCK');
+      if (currentStage === "VIDEO_BLOCK_1") {
+        const pendingVideos = getPending("video");
+        if (
+          pendingVideos.length === 0 ||
+          nextVideoModelIndex >= VEO_MODELS.length
+        ) {
+          setGenerationStage("IMAGE_BLOCK");
           setNextVideoModelIndex(0);
           setIsQueueRunning(false);
           return;
         }
         const videoBatch = pendingVideos.slice(0, 2);
         const modelToUse = VEO_MODELS[nextVideoModelIndex];
-        setGenerationStatusMessage(`Block 1: Generating ${videoBatch.length} video(s) with ${modelToUse}...`);
+        setGenerationStatusMessage(
+          `Block 1: Generating ${videoBatch.length} video(s) with ${modelToUse}...`,
+        );
         setLastBatchStart(Date.now());
-        setGeneratedMedia(prev => prev.map(m => videoBatch.some(s => s.scene === m.scene) ? { ...m, status: 'generating' } : m));
+        setGeneratedMedia((prev) =>
+          prev.map((m) =>
+            videoBatch.some((s) => s.scene === m.scene)
+              ? { ...m, status: "generating" }
+              : m,
+          ),
+        );
 
-        const promises = videoBatch.map(s => generateVideoClip(s.prompt, aspectRatio, modelToUse).then(result => ({ scene: s, url: result.url })));
+        const promises = videoBatch.map((s) =>
+          generateVideoClip(s.prompt, aspectRatio, modelToUse).then(
+            (result) => ({ scene: s, url: result.url }),
+          ),
+        );
         const results = await Promise.allSettled(promises);
 
-        setGeneratedMedia(prev => prev.map(mediaItem => {
-          const resultIndex = results.findIndex((_res, i) => videoBatch[i].scene === mediaItem.scene);
-          if (resultIndex === -1) return mediaItem;
-          const result = results[resultIndex];
-          if (result.status === 'fulfilled') {
-            return { ...mediaItem, status: 'complete', url: result.value.url };
-          } else {
-            const errorMessage = result.reason instanceof Error ? result.reason.message : 'An unknown error occurred.';
-            console.error(`Scene ${mediaItem.scene} failed:`, result.reason);
-            return { ...mediaItem, status: 'failed', error: errorMessage };
-          }
-        }));
+        setGeneratedMedia((prev) =>
+          prev.map((mediaItem) => {
+            const resultIndex = results.findIndex(
+              (_res, i) => videoBatch[i].scene === mediaItem.scene,
+            );
+            if (resultIndex === -1) return mediaItem;
+            const result = results[resultIndex];
+            if (result.status === "fulfilled") {
+              return {
+                ...mediaItem,
+                status: "complete",
+                url: result.value.url,
+              };
+            } else {
+              const errorMessage =
+                result.reason instanceof Error
+                  ? result.reason.message
+                  : "An unknown error occurred.";
+              console.error(`Scene ${mediaItem.scene} failed:`, result.reason);
+              return { ...mediaItem, status: "failed", error: errorMessage };
+            }
+          }),
+        );
 
-        setNextVideoModelIndex(prev => prev + 1);
+        setNextVideoModelIndex((prev) => prev + 1);
         setIsQueueRunning(false);
         return;
       }
 
       // Process all images in a single stage.
-      if (currentStage === 'IMAGE_BLOCK') {
-        const pendingImages = getPending('image');
+      if (currentStage === "IMAGE_BLOCK") {
+        const pendingImages = getPending("image");
         if (pendingImages.length === 0) {
-          setGenerationStage('VIDEO_BLOCK_2');
+          setGenerationStage("VIDEO_BLOCK_2");
           setIsQueueRunning(false);
           return;
         }
 
         const imageBatch = pendingImages.slice(0, 20); // Can process more images at once.
-        setGenerationStatusMessage(`Generating a batch of ${imageBatch.length} images...`);
+        setGenerationStatusMessage(
+          `Generating a batch of ${imageBatch.length} images...`,
+        );
         setLastBatchStart(Date.now());
-        setGeneratedMedia(prev => prev.map(m => imageBatch.some(s => s.scene === m.scene) ? { ...m, status: 'generating' } : m));
+        setGeneratedMedia((prev) =>
+          prev.map((m) =>
+            imageBatch.some((s) => s.scene === m.scene)
+              ? { ...m, status: "generating" }
+              : m,
+          ),
+        );
 
-        const promises = imageBatch.map(s => generateImage(s.prompt, aspectRatio).then(result => ({ scene: s, url: result.url })));
+        const promises = imageBatch.map((s) =>
+          generateImage(s.prompt, aspectRatio).then((result) => ({
+            scene: s,
+            url: result.url,
+          })),
+        );
         const results = await Promise.allSettled(promises);
 
-        setGeneratedMedia(prev => prev.map(mediaItem => {
-          const resultIndex = results.findIndex((_res, i) => imageBatch[i].scene === mediaItem.scene);
-          if (resultIndex === -1) return mediaItem;
-          const result = results[resultIndex];
-          if (result.status === 'fulfilled') {
-            return { ...mediaItem, status: 'complete', url: result.value.url };
-          } else {
-            const errorMessage = result.reason instanceof Error ? result.reason.message : 'An unknown error occurred.';
-            console.error(`Scene ${mediaItem.scene} failed:`, result.reason);
-            return { ...mediaItem, status: 'failed', error: errorMessage };
-          }
-        }));
+        setGeneratedMedia((prev) =>
+          prev.map((mediaItem) => {
+            const resultIndex = results.findIndex(
+              (_res, i) => imageBatch[i].scene === mediaItem.scene,
+            );
+            if (resultIndex === -1) return mediaItem;
+            const result = results[resultIndex];
+            if (result.status === "fulfilled") {
+              return {
+                ...mediaItem,
+                status: "complete",
+                url: result.value.url,
+              };
+            } else {
+              const errorMessage =
+                result.reason instanceof Error
+                  ? result.reason.message
+                  : "An unknown error occurred.";
+              console.error(`Scene ${mediaItem.scene} failed:`, result.reason);
+              return { ...mediaItem, status: "failed", error: errorMessage };
+            }
+          }),
+        );
 
-        if (getPending('image').length === 0) {
-          setGenerationStage('VIDEO_BLOCK_2');
+        if (getPending("image").length === 0) {
+          setGenerationStage("VIDEO_BLOCK_2");
         }
         setIsQueueRunning(false);
         return;
       }
 
       // Process any remaining videos.
-      if (currentStage === 'VIDEO_BLOCK_2') {
-        const pendingVideos = getPending('video');
+      if (currentStage === "VIDEO_BLOCK_2") {
+        const pendingVideos = getPending("video");
         if (pendingVideos.length === 0) {
-          setGenerationStage('DONE');
+          setGenerationStage("DONE");
           setAppStatus(AppStatus.COMPLETE);
           setIsQueueRunning(false);
           return;
@@ -235,39 +330,74 @@ export const MusicVideoGenerator: React.FC<MusicVideoGeneratorProps> = ({ onBack
 
         const videoBatch = pendingVideos.slice(0, 2);
         const modelToUse = VEO_MODELS[nextVideoModelIndex % VEO_MODELS.length];
-        setGenerationStatusMessage(`Block 2: Generating ${videoBatch.length} video(s) with ${modelToUse}...`);
+        setGenerationStatusMessage(
+          `Block 2: Generating ${videoBatch.length} video(s) with ${modelToUse}...`,
+        );
         setLastBatchStart(Date.now());
-        setGeneratedMedia(prev => prev.map(m => videoBatch.some(s => s.scene === m.scene) ? { ...m, status: 'generating' } : m));
+        setGeneratedMedia((prev) =>
+          prev.map((m) =>
+            videoBatch.some((s) => s.scene === m.scene)
+              ? { ...m, status: "generating" }
+              : m,
+          ),
+        );
 
-        const promises = videoBatch.map(s => generateVideoClip(s.prompt, aspectRatio, modelToUse).then(result => ({ scene: s, url: result.url })));
+        const promises = videoBatch.map((s) =>
+          generateVideoClip(s.prompt, aspectRatio, modelToUse).then(
+            (result) => ({ scene: s, url: result.url }),
+          ),
+        );
         const results = await Promise.allSettled(promises);
 
-        setGeneratedMedia(prev => prev.map(mediaItem => {
-          const resultIndex = results.findIndex((_res, i) => videoBatch[i].scene === mediaItem.scene);
-          if (resultIndex === -1) return mediaItem;
-          const result = results[resultIndex];
-          if (result.status === 'fulfilled') {
-            return { ...mediaItem, status: 'complete', url: result.value.url };
-          } else {
-            const errorMessage = result.reason instanceof Error ? result.reason.message : 'An unknown error occurred.';
-            console.error(`Scene ${mediaItem.scene} failed:`, result.reason);
-            return { ...mediaItem, status: 'failed', error: errorMessage };
-          }
-        }));
+        setGeneratedMedia((prev) =>
+          prev.map((mediaItem) => {
+            const resultIndex = results.findIndex(
+              (_res, i) => videoBatch[i].scene === mediaItem.scene,
+            );
+            if (resultIndex === -1) return mediaItem;
+            const result = results[resultIndex];
+            if (result.status === "fulfilled") {
+              return {
+                ...mediaItem,
+                status: "complete",
+                url: result.value.url,
+              };
+            } else {
+              const errorMessage =
+                result.reason instanceof Error
+                  ? result.reason.message
+                  : "An unknown error occurred.";
+              console.error(`Scene ${mediaItem.scene} failed:`, result.reason);
+              return { ...mediaItem, status: "failed", error: errorMessage };
+            }
+          }),
+        );
 
-        setNextVideoModelIndex(prev => prev + 1);
+        setNextVideoModelIndex((prev) => prev + 1);
         setIsQueueRunning(false);
         return;
       }
     } catch (e: any) {
       console.error("A critical error occurred in the generation queue:", e);
-      setError("A critical error occurred. Please check the console and consider restarting.");
-      setGeneratedMedia(prev => prev.map(m => m.status === 'generating' ? { ...m, status: 'failed' } : m));
+      setError(
+        "A critical error occurred. Please check the console and consider restarting.",
+      );
+      setGeneratedMedia((prev) =>
+        prev.map((m) =>
+          m.status === "generating" ? { ...m, status: "failed" } : m,
+        ),
+      );
     }
 
     setIsQueueRunning(false);
-
-  }, [generatedMedia, storyboard, lastBatchStart, songDetails, generationStage, nextVideoModelIndex]);
+  }, [
+    generatedMedia,
+    storyboard,
+    lastBatchStart,
+    songDetails,
+    generationStage,
+    nextVideoModelIndex,
+  ]);
 
   // Effect to trigger the queue manager whenever the state allows.
   useEffect(() => {
@@ -280,9 +410,13 @@ export const MusicVideoGenerator: React.FC<MusicVideoGeneratorProps> = ({ onBack
    * Triggers the `videoCombiner` service to assemble the final video.
    */
   const handleCombineMedia = useCallback(async () => {
-    const completeMedia = generatedMedia.filter(m => m.status === 'complete' && m.url);
+    const completeMedia = generatedMedia.filter(
+      (m) => m.status === "complete" && m.url,
+    );
     if (!songDetails?.audioFile || completeMedia.length !== storyboard.length) {
-      setError("All media clips must be successfully generated before combining.");
+      setError(
+        "All media clips must be successfully generated before combining.",
+      );
       return;
     }
 
@@ -303,7 +437,7 @@ export const MusicVideoGenerator: React.FC<MusicVideoGeneratorProps> = ({ onBack
       // Add the final video to the gallery.
       if (songDetails) {
         onCreationComplete({
-          type: 'music-video',
+          type: "music-video",
           title: songDetails.title,
           artist: songDetails.artist,
           url: videoUrl,
@@ -320,48 +454,68 @@ export const MusicVideoGenerator: React.FC<MusicVideoGeneratorProps> = ({ onBack
   /**
    * Resets a specific scene to 'pending' to allow it to be regenerated.
    */
-  const handleRegenerateScene = useCallback((sceneNumber: number) => {
-    if (finalVideoUrl) {
-      URL.revokeObjectURL(finalVideoUrl);
-      setFinalVideoUrl(null);
-    }
-
-    setGeneratedMedia(prev => {
-      const newMedia = [...prev];
-      const index = newMedia.findIndex(m => m.scene === sceneNumber);
-      if (index !== -1) {
-        if (newMedia[index].url) {
-          URL.revokeObjectURL(newMedia[index].url!);
-        }
-        newMedia[index] = { ...newMedia[index], status: 'pending', url: null, error: undefined };
-        setAppStatus(AppStatus.GENERATING_MEDIA);
-        setGenerationStage('INITIAL');
-        setNextVideoModelIndex(0);
+  const handleRegenerateScene = useCallback(
+    (sceneNumber: number) => {
+      if (finalVideoUrl) {
+        URL.revokeObjectURL(finalVideoUrl);
+        setFinalVideoUrl(null);
       }
-      return newMedia;
-    });
-  }, [finalVideoUrl]);
+
+      setGeneratedMedia((prev) => {
+        const newMedia = [...prev];
+        const index = newMedia.findIndex((m) => m.scene === sceneNumber);
+        if (index !== -1) {
+          if (newMedia[index].url) {
+            URL.revokeObjectURL(newMedia[index].url!);
+          }
+          newMedia[index] = {
+            ...newMedia[index],
+            status: "pending",
+            url: null,
+            error: undefined,
+          };
+          setAppStatus(AppStatus.GENERATING_MEDIA);
+          setGenerationStage("INITIAL");
+          setNextVideoModelIndex(0);
+        }
+        return newMedia;
+      });
+    },
+    [finalVideoUrl],
+  );
 
   // Main render logic that switches between different screens based on the app status.
   const renderContent = () => {
     switch (appStatus) {
       case AppStatus.UPLOAD:
-        return <UploadScreen onSubmit={handleUploadSubmit} error={error} profile={profile} setProfile={setProfile} onBack={onBackToStudio} />;
+        return (
+          <UploadScreen
+            onSubmit={handleUploadSubmit}
+            error={error}
+            profile={profile}
+            setProfile={setProfile}
+            onBack={onBackToStudio}
+          />
+        );
       case AppStatus.GENERATING_STORYBOARD:
-        return <Loader message="Directing the vision... Analyzing audio and generating storyboard..." />;
+        return (
+          <Loader message="Directing the vision... Analyzing audio and generating storyboard..." />
+        );
       case AppStatus.GENERATING_MEDIA:
       case AppStatus.COMPLETE:
-        return <ProductionStudio
-          songDetails={songDetails!}
-          storyboard={storyboard}
-          generatedMedia={generatedMedia}
-          isGenerating={appStatus === AppStatus.GENERATING_MEDIA}
-          generationStatusMessage={generationStatusMessage}
-          isCombining={isCombining}
-          finalVideoUrl={finalVideoUrl}
-          onCombine={handleCombineMedia}
-          onRegenerate={handleRegenerateScene}
-        />;
+        return (
+          <ProductionStudio
+            songDetails={songDetails!}
+            storyboard={storyboard}
+            generatedMedia={generatedMedia}
+            isGenerating={appStatus === AppStatus.GENERATING_MEDIA}
+            generationStatusMessage={generationStatusMessage}
+            isCombining={isCombining}
+            finalVideoUrl={finalVideoUrl}
+            onCombine={handleCombineMedia}
+            onRegenerate={handleRegenerateScene}
+          />
+        );
       default:
         return <Loader />;
     }
@@ -374,7 +528,9 @@ export const MusicVideoGenerator: React.FC<MusicVideoGeneratorProps> = ({ onBack
           <h1 className="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[var(--accent-primary)] via-[var(--accent-secondary)] to-[var(--accent-primary)] font-display">
             AI Music Video Generator
           </h1>
-          <p className="mt-2 text-[var(--text-secondary)]">Your Vision, Generated.</p>
+          <p className="mt-2 text-[var(--text-secondary)]">
+            Your Vision, Generated.
+          </p>
         </div>
         <button
           onClick={onBackToStudio}

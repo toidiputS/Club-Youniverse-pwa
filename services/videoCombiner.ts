@@ -4,23 +4,22 @@
  * It uses the 'cline' tool, a high-performance video assembly engine, to perform the combination.
  */
 
-import type { GeneratedMedia, StoryboardScene } from '../types';
+import type { GeneratedMedia, StoryboardScene } from "../types";
 
 // Define the expected interface for the 'cline' tool on the window object.
 declare global {
-    interface Window {
-        cline?: {
-            run: (params: {
-                media: { type: 'video' | 'image'; url: string }[];
-                audio: string;
-                imageDurationMs: number;
-                width: number;
-                height: number;
-            }) => Promise<{ url: string }>;
-        }
-    }
+  interface Window {
+    cline?: {
+      run: (params: {
+        media: { type: "video" | "image"; url: string }[];
+        audio: string;
+        imageDurationMs: number;
+        width: number;
+        height: number;
+      }) => Promise<{ url: string }>;
+    };
+  }
 }
-
 
 interface CombineMediaParams {
   media: (GeneratedMedia & { url: string })[];
@@ -34,53 +33,83 @@ interface CombineMediaParams {
  * @param params - An object containing the media, audio file, and storyboard.
  * @returns A promise that resolves to a blob URL of the final combined video.
  */
-export const combineMedia = ({ media, audioFile }: CombineMediaParams): Promise<string> => {
+export const combineMedia = ({
+  media,
+  audioFile,
+}: CombineMediaParams): Promise<string> => {
   return new Promise(async (resolve, reject) => {
     // Check if the cline tool is available.
-    if (!window.cline || typeof window.cline.run !== 'function') {
-      return reject(new Error("The 'cline' video combination tool is not available. This may be a browser compatibility issue or the tool was not installed correctly."));
+    if (!window.cline || typeof window.cline.run !== "function") {
+      return reject(
+        new Error(
+          "The 'cline' video combination tool is not available. This may be a browser compatibility issue or the tool was not installed correctly.",
+        ),
+      );
     }
 
     let audioObjectUrl: string | null = null;
-    
+
     try {
       // Pre-load media elements to get their dimensions and durations.
       const videoElements = media
-        .filter(m => m.type === 'video')
-        .map(m => {
-          const video = document.createElement('video');
+        .filter((m) => m.type === "video")
+        .map((m) => {
+          const video = document.createElement("video");
           video.src = m.url;
           video.muted = true;
           video.preload = "auto";
           return video;
-      });
-      
+        });
+
       const imageElements = media
-        .filter(m => m.type === 'image')
-        .map(m => {
+        .filter((m) => m.type === "image")
+        .map((m) => {
           const img = new Image();
           img.src = m.url;
           return img;
-      });
+        });
 
       await Promise.all([
-          ...videoElements.map(v => new Promise((res, rej) => { v.onloadedmetadata = res; v.onerror = rej; v.load() })),
-          ...imageElements.map(img => new Promise((res, rej) => { img.onload = res; img.onerror = rej; }))
+        ...videoElements.map(
+          (v) =>
+            new Promise((res, rej) => {
+              v.onloadedmetadata = res;
+              v.onerror = rej;
+              v.load();
+            }),
+        ),
+        ...imageElements.map(
+          (img) =>
+            new Promise((res, rej) => {
+              img.onload = res;
+              img.onerror = rej;
+            }),
+        ),
       ]);
 
       // Load audio to get its duration.
-      const audio = document.createElement('audio');
+      const audio = document.createElement("audio");
       audioObjectUrl = URL.createObjectURL(audioFile);
       audio.src = audioObjectUrl;
-      await new Promise<void>((res, rej) => { audio.onloadedmetadata = () => res(); audio.onerror = rej; });
+      await new Promise<void>((res, rej) => {
+        audio.onloadedmetadata = () => res();
+        audio.onerror = rej;
+      });
 
       // Calculate duration for each image.
-      const totalVideoDuration = videoElements.reduce((acc, v) => acc + v.duration, 0);
+      const totalVideoDuration = videoElements.reduce(
+        (acc, v) => acc + v.duration,
+        0,
+      );
       const audioDuration = audio.duration;
-      const remainingForImages = Math.max(0, audioDuration - totalVideoDuration);
+      const remainingForImages = Math.max(
+        0,
+        audioDuration - totalVideoDuration,
+      );
       const imageCount = imageElements.length;
-      const imageDurationMs = imageCount > 0 ? (remainingForImages * 1000) / imageCount : 0;
-      
+      const imageDurationMs =
+        imageCount > 0 ? (remainingForImages * 1000) / imageCount : 0;
+
       // Determine output dimensions.
       let width = 1280;
       let height = 720;
@@ -91,12 +120,12 @@ export const combineMedia = ({ media, audioFile }: CombineMediaParams): Promise<
         width = imageElements[0].width;
         height = imageElements[0].height;
       }
-      
+
       // Prepare the payload for the cline tool.
       const sortedMedia = media.sort((a, b) => a.scene - b.scene);
-      const clineMedia = sortedMedia.map(m => ({
-          type: m.type,
-          url: m.url,
+      const clineMedia = sortedMedia.map((m) => ({
+        type: m.type,
+        url: m.url,
       }));
 
       // Execute the cline tool.
@@ -110,19 +139,20 @@ export const combineMedia = ({ media, audioFile }: CombineMediaParams): Promise<
       });
 
       if (!result || !result.url) {
-        throw new Error("The 'cline' tool finished but did not return a valid video URL.");
+        throw new Error(
+          "The 'cline' tool finished but did not return a valid video URL.",
+        );
       }
-      
+
       // Resolve with the blob URL from cline.
       resolve(result.url);
-
     } catch (e: any) {
       console.error("Error during 'cline' video combination:", e);
       reject(new Error(`Video combination failed: ${e.message}`));
     } finally {
       // Clean up the object URL created for the audio file.
       if (audioObjectUrl) {
-          URL.revokeObjectURL(audioObjectUrl);
+        URL.revokeObjectURL(audioObjectUrl);
       }
     }
   });

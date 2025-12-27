@@ -3,8 +3,8 @@
  * It uses WebGL via the Three.js library to create a dynamic, generative "aurora" effect.
  */
 
-import React, { useEffect, useRef } from 'react';
-import * as THREE from 'three';
+import React, { useEffect, useRef } from "react";
+import * as THREE from "three";
 
 const vertexShader = `
   void main() {
@@ -80,7 +80,7 @@ export const AudioVisualizer: React.FC = () => {
     if (!containerRef.current) return;
     const container = containerRef.current;
 
-    if (container.querySelector('canvas')) {
+    if (container.querySelector("canvas")) {
       return;
     }
 
@@ -94,7 +94,10 @@ export const AudioVisualizer: React.FC = () => {
     const handleResize = () => {
       if (renderer && material) {
         renderer.setSize(window.innerWidth, window.innerHeight);
-        material.uniforms.iResolution.value.set(window.innerWidth, window.innerHeight);
+        material.uniforms.iResolution.value.set(
+          window.innerWidth,
+          window.innerHeight,
+        );
       }
     };
 
@@ -110,10 +113,12 @@ export const AudioVisualizer: React.FC = () => {
       material = new THREE.ShaderMaterial({
         uniforms: {
           iTime: { value: 0 },
-          iResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
+          iResolution: {
+            value: new THREE.Vector2(window.innerWidth, window.innerHeight),
+          },
         },
         vertexShader: vertexShader,
-        fragmentShader: fragmentShader
+        fragmentShader: fragmentShader,
       });
 
       geometry = new THREE.PlaneGeometry(2, 2);
@@ -129,17 +134,19 @@ export const AudioVisualizer: React.FC = () => {
       };
       animate();
 
-      window.addEventListener('resize', handleResize);
-
+      window.addEventListener("resize", handleResize);
     } catch (error) {
-      console.warn("⚠️ AudioVisualizer: WebGL not supported or disabled. Falling back to CSS background.", error);
+      console.warn(
+        "⚠️ AudioVisualizer: WebGL not supported or disabled. Falling back to CSS background.",
+        error,
+      );
       // Optional: Could add a CSS class or style to container for fallback if needed
       // For now, the app has a default background so this is fine.
     }
 
     return () => {
       if (frameId) cancelAnimationFrame(frameId);
-      window.removeEventListener('resize', handleResize);
+      window.removeEventListener("resize", handleResize);
       if (container && renderer && renderer.domElement) {
         try {
           // Check if child still exists before removing
