@@ -16,6 +16,7 @@ import { supabase } from "../services/supabaseClient";
 import { updateSong, getProfile } from "../services/supabaseSongService";
 import type { View, Song, Profile } from "../types";
 import { RadioContext } from "../contexts/AudioPlayerContext";
+import { getBroadcastManager } from "../services/globalBroadcastManager";
 import { getCurrentDj } from "../logic/djRoster";
 import { LiveChat } from "./LiveChat";
 import { Loader } from "./Loader";
@@ -70,6 +71,8 @@ export const Radio: React.FC<RadioProps> = ({
     clearLiveRatings,
     songEndedTrigger,
     isLeader,
+    setIsAutoplayBlocked, // Get setter from context
+    isAutoplayBlocked,    // Get state from context
   } = useContext(RadioContext);
 
   // Local state for managing the radio simulation.
@@ -84,8 +87,34 @@ export const Radio: React.FC<RadioProps> = ({
   const lastRoundStartRef = useRef(0);
   const startNextRoundRef = useRef<() => void>(() => { });
 
-  // Autoplay blocked state
-  const [isAutoplayBlocked, setIsAutoplayBlocked] = useState(false);
+
+
+  /**
+   * Maps a raw Supabase song row (snake_case) to our Song type (camelCase)
+   */
+  const mapSongFromDB = (raw: any): Song => ({
+    id: raw.id,
+    uploaderId: raw.uploader_id || raw.uploaderId,
+    title: raw.title,
+    artistName: raw.artist_name || raw.artistName,
+    source: raw.source,
+    audioUrl: raw.audio_url || raw.audioUrl,
+    durationSec: raw.duration_sec || raw.durationSec || 0,
+    stars: raw.stars || 0,
+    boxRoundsSeen: raw.box_rounds_seen || raw.boxRoundsSeen || 0,
+    boxRoundsLost: raw.box_rounds_lost || raw.boxRoundsLost || 0,
+    boxAppearanceCount: raw.box_appearance_count || raw.boxAppearanceCount || 0,
+    status: raw.status || 'pool',
+    coverArtUrl: raw.cover_art_url || raw.coverArtUrl,
+    lyrics: raw.lyrics,
+    moods: raw.moods,
+    tags: raw.tags,
+    playCount: raw.play_count || raw.playCount || 0,
+    upvotes: raw.upvotes || 0,
+    downvotes: raw.downvotes || 0,
+    lastPlayedAt: raw.last_played_at || raw.lastPlayedAt || '',
+    createdAt: raw.created_at || raw.createdAt || '',
+  });
 
   // Safety timeout for initialization
   useEffect(() => {
@@ -105,6 +134,22 @@ export const Radio: React.FC<RadioProps> = ({
   // Ideally we subscribe to 'playbackStateChanged' or similar.
   // For now, let's trust the Context/Manager to handle this.
   // Removing the redundant effect that fights with the manager.
+
+  // Listen for Autoplay Block events from the Audio Engine
+  useEffect(() => {
+    const broadcastManager = getBroadcastManager();
+
+    const handleAutoplayBlocked = () => {
+      console.log("🚫 Autoplay blocked event received! Showing overlay.");
+      setIsAutoplayBlocked(true);
+    };
+
+    broadcastManager.on("autoplayBlocked", handleAutoplayBlocked);
+
+    return () => {
+      broadcastManager.off("autoplayBlocked", handleAutoplayBlocked);
+    };
+  }, [setIsAutoplayBlocked]);
 
   // Effect to check for DJ shift changes periodically.
   useEffect(() => {
@@ -142,25 +187,41 @@ export const Radio: React.FC<RadioProps> = ({
   }, []);
 
   useEffect(() => {
-    // Only auto-start if:
+    // Auto-start conditions:
     // 1. We are the leader (Only leader orchestrates)
     // 2. We have songs in the pool
     // 3. Nothing is currently playing
     // 4. We're not loading
-    // 5. We're in the initial DJ_BANTER_INTRO state (means radio hasn't started yet)
-    if (
-      isLeader &&
+    // 5. EITHER:
+    //    a) We're in the initial DJ_BANTER_INTRO state, OR
+    //    b) We're in BOX_VOTING but have no candidates (stale DB state)
+
+    const conditionBanter = radioState === "DJ_BANTER_INTRO";
+    const conditionBox = radioState === "BOX_VOTING" && (!boxRound || boxRound.candidates.length === 0 || !nowPlaying);
+    const conditionZombie = radioState === "NOW_PLAYING" && !nowPlaying;
+
+    // Debug logging for Auto-Start Logic (Cleaned up) 
+
+    const shouldAutoStart =
       !isPoolEmpty &&
       !nowPlaying &&
       !isLoading &&
-      radioState === "DJ_BANTER_INTRO"
-    ) {
-      console.log(`🚀 AUTO-START (Leader): Starting radio...`);
+      (
+        // Normal operation: Only Leader drives
+        (isLeader && (conditionBanter || conditionBox)) ||
+
+        // Emergency Recovery: ANYONE can fix a Zombie State (Playing but no song)
+        // This fixes the "Stuck as Follower" bug where the radio dies if the leader tab closes.
+        conditionZombie
+      );
+
+    if (shouldAutoStart) {
+      console.log(`🚀 AUTO-START (Leader): Starting radio... (state: ${radioState})`);
       setTimeout(() => {
         startNextRoundRef.current();
       }, 2000); // 2 second delay to let everything settle
     }
-  }, [isPoolEmpty, nowPlaying, isLoading, radioState, isLeader]);
+  }, [isPoolEmpty, nowPlaying, isLoading, radioState, isLeader, boxRound]);
 
   // Effect to detect a new song submission and check if it qualifies for a priority debut.
   useEffect(() => {
@@ -204,7 +265,7 @@ export const Radio: React.FC<RadioProps> = ({
         if (data && data.length > 0) {
           setBoxRound({
             id: `recovered-${Date.now()}`,
-            candidates: data as Song[],
+            candidates: data.map(mapSongFromDB),
             startedAt: new Date().toISOString(),
           });
         } else {
@@ -234,10 +295,11 @@ export const Radio: React.FC<RadioProps> = ({
       setVoteCounts({});
       setBoxRound(null);
       // If we joined mid-stream, sync immediately
-      const currentState = broadcastManager.getRadioState();
-      if (currentState !== "OFFLINE" && currentState !== "DJ_BANTER_INTRO") {
+      const manager = getBroadcastManager();
+      const currentState = manager.getRadioState();
+      if (currentState !== "DJ_BANTER_INTRO") {
         setRadioState(currentState);
-        const currentSong = broadcastManager.getNowPlaying();
+        const currentSong = manager.getNowPlaying();
         if (currentSong) setNowPlaying(currentSong);
       } else {
         // Otherwise, start from the beginning
@@ -316,6 +378,33 @@ export const Radio: React.FC<RadioProps> = ({
     hardRestartRadio();
   }, [restartRadioTrigger]);
 
+  // LIVE VOTE SYNC: Subscribe to song updates to show real-time votes from other users
+  useEffect(() => {
+    if (radioState !== "BOX_VOTING" || !boxRound) return;
+
+    const channel = supabase
+      .channel("public:songs:votes")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "songs" },
+        (payload) => {
+          const updatedSong = payload.new as Song;
+          // If the updated song is in our box, update the count
+          if (boxRound.candidates.some(c => c.id === updatedSong.id)) {
+            setVoteCounts((prev) => ({
+              ...prev,
+              [updatedSong.id]: updatedSong.upvotes || 0
+            }));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [radioState, boxRound, setVoteCounts]);
+
   // When TTS gets muted by an error, make sure the banner is available to be shown.
   useEffect(() => {
     if (isTtsErrorMuted) {
@@ -368,14 +457,14 @@ export const Radio: React.FC<RadioProps> = ({
         return (fallbackData || [])
           .sort(() => 0.5 - Math.random())
           .slice(0, count)
-          .map((s) => s as any);
+          .map(mapSongFromDB);
       }
 
       // Shuffle and take requested count
       return data
         .sort(() => 0.5 - Math.random())
         .slice(0, count)
-        .map((s) => s as any);
+        .map(mapSongFromDB);
     },
     [nowPlaying?.id],
   );
@@ -560,29 +649,11 @@ export const Radio: React.FC<RadioProps> = ({
     startNextRoundRef.current = startNextRound;
   }, [startNextRound]);
 
+  /* SIMULATION REMOVED - REAL VOTING ONLY
   useEffect(() => {
-    if (!isLeader || radioState !== "BOX_VOTING" || !boxRound) return;
-
-    // Simulated votes happen continuously while Box is active
-    const voteInterval = setInterval(() => {
-      const candidateIds = boxRound.candidates.map((c) => c.id);
-      if (candidateIds.length > 0) {
-        const randomCandidateId =
-          candidateIds[Math.floor(Math.random() * candidateIds.length)];
-        setVoteCounts((counts) => ({
-          ...counts,
-          [randomCandidateId]:
-            (counts[randomCandidateId] || 0) +
-            Math.floor(Math.random() * 5) +
-            1,
-        }));
-      }
-    }, 800);
-
-    return () => {
-      clearInterval(voteInterval);
-    };
+    // ...
   }, [radioState, boxRound, setVoteCounts]);
+  */
 
   // AUTO-END VOTING ROUND (Fix for Stalled Radio)
   useEffect(() => {
@@ -904,9 +975,9 @@ export const Radio: React.FC<RadioProps> = ({
           </div>
 
           {/* 5 SMALL CARDS AT BOTTOM */}
-          <div className="flex gap-4 mt-8 pb-4 justify-between px-12 items-end">
+          <div className="flex gap-3 mt-4 pb-3 justify-between px-4 items-end">
             {/* 1. DJ Booth - far left */}
-            <div className="w-80 flex-shrink-0">
+            <div className="w-56 flex-shrink-0">
               <DjBooth profile={profile} />
             </div>
 

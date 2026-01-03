@@ -58,6 +58,8 @@ interface RadioContextType {
   setVolume: React.Dispatch<React.SetStateAction<number>>;
   isGloballyMuted: boolean;
   setIsGloballyMuted: React.Dispatch<React.SetStateAction<boolean>>;
+  isAutoplayBlocked: boolean; // Added
+  setIsAutoplayBlocked: React.Dispatch<React.SetStateAction<boolean>>; // Added
   currentDj: DjProfile;
   setCurrentDj: React.Dispatch<React.SetStateAction<DjProfile>>;
   // New state for live voting on the Now Playing song
@@ -112,6 +114,8 @@ export const RadioContext = createContext<RadioContextType>({
   setVolume: () => { },
   isGloballyMuted: false,
   setIsGloballyMuted: () => { },
+  isAutoplayBlocked: false,
+  setIsAutoplayBlocked: () => { },
   currentDj: getCurrentDj(),
   setCurrentDj: () => { },
   liveRatings: [],
@@ -183,6 +187,9 @@ export const RadioProvider: React.FC<{
   );
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isTtsErrorMuted, setIsTtsErrorMuted] = useState<boolean>(false);
+
+  // State for Autoplay Blocking Overlay
+  const [isAutoplayBlocked, setIsAutoplayBlocked] = useState(false);
 
   // State for the new multi-DJ system.
   const [currentDj, setCurrentDj] = useState<DjProfile>(getCurrentDj());
@@ -510,7 +517,9 @@ export const RadioProvider: React.FC<{
 
       if (playPromise !== undefined) {
         playPromise.catch((error) => {
-          console.error("Snippet playback failed:", error);
+          if (error.name !== 'AbortError') {
+            console.error("Snippet playback failed:", error);
+          }
           setSnippetPlayingUrl(null); // Reset on failure
         });
       }
@@ -536,12 +545,6 @@ export const RadioProvider: React.FC<{
 
   const playSnippet = useCallback((url: string) => {
     setSnippetPlayingUrl(url);
-    const audioEl = snippetAudioRef.current;
-    if (audioEl) {
-      audioEl.src = url;
-      audioEl.volume = 0.5;
-      audioEl.play().catch((e) => console.error("Snippet play failed", e));
-    }
   }, []);
 
   const stopSnippet = useCallback(() => {
@@ -609,6 +612,8 @@ export const RadioProvider: React.FC<{
       setProfile,
       currentTime,
       duration,
+      isAutoplayBlocked,
+      setIsAutoplayBlocked,
     }),
     [
       nowPlaying,
@@ -642,6 +647,7 @@ export const RadioProvider: React.FC<{
       setProfile,
       currentTime,
       duration,
+      isAutoplayBlocked, // Dependency added
     ],
   );
 

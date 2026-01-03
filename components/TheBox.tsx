@@ -5,7 +5,6 @@
 
 import React, { useContext } from "react";
 import { RadioContext } from "../contexts/AudioPlayerContext";
-import { SectionCard } from "./SectionCard";
 import type { Song } from "../types";
 
 interface TheBoxProps {
@@ -27,14 +26,14 @@ export const TheBox: React.FC<TheBoxProps> = ({
     useContext(RadioContext);
 
   return (
-    <div className="w-full max-w-5xl mx-auto h-[280px] flex gap-2 px-4 items-center justify-center">
+    <div className="w-full max-w-3xl mx-auto h-[120px] flex gap-1.5 items-center justify-center">
       {candidates.map((song) => (
         <div
           key={song.id}
           className="
                         relative flex-1 hover:flex-[3] 
                         transition-[flex] duration-500 ease-out 
-                        h-full rounded-2xl overflow-hidden 
+                        h-full rounded-xl overflow-hidden 
                         cursor-pointer group 
                         border border-white/5 hover:border-[#00ffeb]/50 
                         bg-gradient-to-br from-[#1a1a1a] to-black
@@ -53,14 +52,14 @@ export const TheBox: React.FC<TheBoxProps> = ({
           </div>
 
           {/* Content Container */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-2">
             {/* COLLAPSED STATE: Vertical Text */}
             <div className="absolute inset-0 flex items-center justify-center transition-opacity duration-300 group-hover:opacity-0 delay-0 group-hover:delay-0 opacity-100">
-              <div className="text-center px-2">
-                <h4 className="text-sm font-bold text-white/90 mb-1 leading-tight">
+              <div className="text-center px-1">
+                <h4 className="text-xs font-bold text-white/90 leading-tight truncate">
                   {song.title}
                 </h4>
-                <p className="text-xs text-[#00ffeb]/80 uppercase tracking-wide">
+                <p className="text-[10px] text-[#00ffeb]/80 uppercase tracking-wide truncate">
                   {song.artistName}
                 </p>
               </div>
@@ -71,8 +70,8 @@ export const TheBox: React.FC<TheBoxProps> = ({
               className="
                             opacity-0 group-hover:opacity-100 
                             transition-all duration-500 delay-100 
-                            transform translate-y-8 group-hover:translate-y-0
-                            flex flex-col items-center text-center gap-3 w-full
+                            transform translate-y-4 group-hover:translate-y-0
+                            flex flex-col items-center text-center gap-1 w-full
                         "
             >
               {/* Snippet Toggle */}
@@ -85,7 +84,7 @@ export const TheBox: React.FC<TheBoxProps> = ({
                     playSnippet(song.audioUrl);
                   }
                 }}
-                className="w-10 h-10 rounded-full bg-white/10 hover:bg-[#00ffeb]/20 flex items-center justify-center backdrop-blur-md border border-white/10 transition-colors"
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-[#00ffeb]/20 flex items-center justify-center backdrop-blur-md border border-white/10 transition-colors"
               >
                 {snippetPlayingUrl === song.audioUrl ? (
                   <div className="w-1.5 h-1.5 bg-[#00ffeb] rounded-sm animate-pulse" />
@@ -107,10 +106,10 @@ export const TheBox: React.FC<TheBoxProps> = ({
               </button>
 
               <div>
-                <h3 className="text-xl md:text-2xl font-black text-white leading-tight tracking-tight drop-shadow-md">
+                <h3 className="text-sm md:text-base font-black text-white leading-tight tracking-tight drop-shadow-md">
                   {song.title}
                 </h3>
-                <p className="text-xs font-bold text-[#00ffeb] tracking-widest uppercase mt-1">
+                <p className="text-[10px] font-bold text-[#00ffeb] tracking-widest uppercase">
                   {song.artistName}
                 </p>
               </div>
@@ -123,19 +122,16 @@ export const TheBox: React.FC<TheBoxProps> = ({
               <button
                 disabled={!isVotingActive || userHasVoted}
                 className={`
-                                    mt-2 px-8 py-2 rounded-full font-bold text-xs uppercase tracking-widest
-                                    transition-all duration-300
-                                    ${
-                                      userHasVoted
-                                        ? "bg-white/10 text-white/30 cursor-not-allowed"
-                                        : "bg-[#00ffeb] text-black hover:bg-white hover:shadow-[0_0_20px_#00ffeb]"
-                                    }
-                                `}
+                    px-4 py-1 rounded-full font-bold text-[10px] uppercase tracking-widest
+                    transition-all duration-300
+                    ${userHasVoted
+                    ? "bg-white/10 text-white/30 cursor-not-allowed"
+                    : "bg-[#00ffeb] text-black hover:bg-white hover:shadow-[0_0_20px_#00ffeb]"
+                  }
+                `}
               >
                 {userHasVoted
-                  ? voteCounts[song.id]
-                    ? `${voteCounts[song.id]} Votes`
-                    : "Voted"
+                  ? (voteCounts[song.id] ? `${voteCounts[song.id]} Votes` : "Voted")
                   : "VOTE"}
               </button>
             </div>

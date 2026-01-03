@@ -145,7 +145,7 @@ export const DjTranscript: React.FC = () => {
         if (currentSourceRef.current) {
           try {
             currentSourceRef.current.stop();
-          } catch (e) {}
+          } catch (e) { }
           currentSourceRef.current = null;
         }
         setIsPlaying(false);
@@ -165,7 +165,10 @@ export const DjTranscript: React.FC = () => {
 
     const playLatestQueueItem = async () => {
       // Prevent new calls if audio is muted by user or an error.
-      if (isTtsUserMuted || isTtsErrorMuted) return;
+      if (isTtsUserMuted || isTtsErrorMuted) {
+        // console.log('🔇 DJ muted - skipping playback');
+        return;
+      }
 
       // Check if there are new, unplayed items and if audio is not already playing.
       if (
@@ -177,6 +180,8 @@ export const DjTranscript: React.FC = () => {
         const newQueueIndex = lastPlayedIndexRef.current + 1;
         const itemToPlay = djQueue[newQueueIndex] as DjQueueItem;
         lastPlayedIndexRef.current = newQueueIndex;
+
+        console.log(`🎙️ DJ Playing item ${newQueueIndex}:`, itemToPlay.type === 'tts' ? itemToPlay.content.substring(0, 50) + '...' : itemToPlay.content);
 
         if (itemToPlay.type === "tts") {
           try {

@@ -195,11 +195,10 @@ export const DjBooth: React.FC<DjBoothProps> = ({ profile }) => {
               <div className="space-y-2 mb-3">
                 <button
                   onClick={handleToggleMute}
-                  className={`w-full text-sm font-bold py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-2 ${
-                    isTtsUserMuted
-                      ? "bg-red-600 text-white hover:bg-red-500"
-                      : "bg-green-600 text-white hover:bg-green-500"
-                  }`}
+                  className={`w-full text-sm font-bold py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-2 ${isTtsUserMuted
+                    ? "bg-red-600 text-white hover:bg-red-500"
+                    : "bg-green-600 text-white hover:bg-green-500"
+                    }`}
                 >
                   {isTtsUserMuted ? (
                     <>
@@ -296,14 +295,14 @@ export const DjBooth: React.FC<DjBoothProps> = ({ profile }) => {
                       onClick={
                         isUnlocked
                           ? () => {
-                              if (
-                                confirm(
-                                  "⚠️ NUCLEAR OPTION: This will stop playback, reset all votes, and force a fresh start for EVERYONE. Are you sure?",
-                                )
-                              ) {
-                                forceRestartRadio();
-                              }
+                            if (
+                              confirm(
+                                "⚠️ NUCLEAR OPTION: This will stop playback, reset all votes, and force a fresh start for EVERYONE. Are you sure?",
+                              )
+                            ) {
+                              forceRestartRadio();
                             }
+                          }
                           : undefined
                       }
                       className="w-full text-xs bg-red-900/80 text-red-200 border border-red-500/50 font-bold py-2 px-3 rounded-lg hover:bg-red-700 hover:text-white transition-all flex items-center justify-center gap-2 uppercase tracking-wider"
@@ -333,7 +332,12 @@ export const DjBooth: React.FC<DjBoothProps> = ({ profile }) => {
                   onSubmit={handleCustomMessage}
                   className="mb-3 space-y-2 animate-fade-in"
                 >
+                  <label htmlFor="dj-custom-message" className="sr-only">
+                    Custom Message
+                  </label>
                   <textarea
+                    id="dj-custom-message"
+                    name="customMessage"
                     value={customMessage}
                     onChange={(e) => setCustomMessage(e.target.value)}
                     placeholder="Type message for DJ to say..."
@@ -364,7 +368,10 @@ export const DjBooth: React.FC<DjBoothProps> = ({ profile }) => {
 
               {/* Volume Control */}
               <div className="mt-auto pt-3 border-t border-white/10">
-                <label className="text-xs text-gray-400 mb-1 block">
+                <label
+                  htmlFor="dj-master-volume"
+                  className="text-xs text-gray-400 mb-1 block"
+                >
                   Master Volume
                 </label>
                 <div className="flex items-center gap-2">
@@ -381,6 +388,8 @@ export const DjBooth: React.FC<DjBoothProps> = ({ profile }) => {
                     />
                   </svg>
                   <input
+                    id="dj-master-volume"
+                    name="masterVolume"
                     type="range"
                     min="0"
                     max="1"
@@ -388,6 +397,7 @@ export const DjBooth: React.FC<DjBoothProps> = ({ profile }) => {
                     value={volume}
                     onChange={handleVolumeChange}
                     className="flex-1 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+                    aria-label="Master Volume Control"
                   />
                   <span className="text-xs text-white font-mono w-10 text-right">
                     {Math.round(volume * 100)}%
@@ -416,16 +426,22 @@ export const DjBooth: React.FC<DjBoothProps> = ({ profile }) => {
                   onSubmit={handlePasswordSubmit}
                   className="w-full space-y-2 animate-fade-in"
                 >
+                  <label htmlFor="dj-booth-password" className="sr-only">
+                    DJ Password
+                  </label>
                   <input
+                    id="dj-booth-password"
+                    name="password"
                     type="password"
                     placeholder="Enter Password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className={inputStyles}
                     autoFocus
+                    autoComplete="current-password"
                   />
                   {error && (
-                    <p className="text-red-500 text-xs text-center">{error}</p>
+                    <p className="text-red-500 text-xs text-center" role="alert">{error}</p>
                   )}
                   <button
                     type="submit"

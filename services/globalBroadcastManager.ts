@@ -114,7 +114,14 @@ export class GlobalBroadcastManager {
         .limit(1)
         .single();
 
-      if (error || !data) return;
+      if (error) {
+        console.error("❌ Leadership check failed - broadcasts query error:", error.message);
+        return;
+      }
+      if (!data) {
+        console.warn("⚠️ No broadcast row found! Please ensure the broadcasts table has a row.");
+        return;
+      }
 
       const now = new Date();
       const heartbeat = data.last_heartbeat
@@ -122,7 +129,7 @@ export class GlobalBroadcastManager {
         : new Date(0);
       const secondsSinceHeartbeat =
         (now.getTime() - heartbeat.getTime()) / 1000;
-      const isCurrentLeaderDead = secondsSinceHeartbeat > 8; // 8s timeout (aggressive recovery)
+      const isCurrentLeaderDead = secondsSinceHeartbeat > 4; // 4s timeout (aggressive recovery)
       const amILeader = data.leader_id === this.userId;
 
       if (amILeader) {
@@ -359,7 +366,12 @@ export class GlobalBroadcastManager {
       this.audioElement.removeAttribute("src");
       this.audioElement.load(); // Required to reset the element and stop it from complaining
       this.emit("nowPlayingChanged", null);
-      await this.persistBroadcastState(); // Persist empty state
+
+      // CRITICAL FIX: If we are clearing the song, we must also reset the state
+      // This prevents "NOW_PLAYING" with no song
+      if (this.isLeaderLocal) {
+        await this.persistBroadcastState(false); // Force update to remove song ID
+      }
       return;
     }
 
@@ -381,10 +393,43 @@ export class GlobalBroadcastManager {
       console.log(`🎵 Playing new song: ${song.title}`);
       this.audioElement.src = song.audioUrl;
       this.audioElement.currentTime = startOffset;
-      // Try to autoplay
-      this.play().catch((e) => console.warn("Autoplay blocked:", e));
+      // Try to autoplay with robust fallback
+      this.play().catch((e) => {
+        console.warn("Initial autoplay blocked, forcing reload:", e);
+        const currentSrc = this.audioElement.src;
+        if (currentSrc) {
+          this.audioElement.src = currentSrc;
+          this.audioElement.load();
+          const playPromise = this.audioElement.play();
+          if (playPromise) {
+            playPromise.catch(e2 => {
+              console.error("Force play (new song) failed:", e2);
+              this.emit("autoplayBlocked", null); // Notify UI to show overlay
+            });
+          }
+        }
+      });
     } else {
       console.log(`🔄 Updating metadata for current song: ${song.title}`);
+
+      // FIX: Ensure it's actually playing!
+      // If we reconnected to an existing state, we might have the right SRC but be PAUSED.
+      if (this.audioElement.paused) {
+        console.log(`▶️ Resuming playback... (Vol: ${this.audioElement.volume}, Muted: ${this.audioElement.muted})`);
+
+        this.play().catch((e) => {
+          console.warn("Simple resume failed, forcing reload:", e);
+          // Robust reload: re-assign src and call load()
+          const currentSrc = this.audioElement.src;
+          this.audioElement.src = currentSrc;
+          this.audioElement.load();
+          const playPromise = this.audioElement.play();
+          if (playPromise) {
+            playPromise.catch((e2) => console.error("Force play failed:", e2));
+          }
+        });
+      }
+
       // Optional: If startOffset is explicitly provided and different, maybe seek?
       // For now, assume metadata updates don't want to seek unless explicit.
       if (

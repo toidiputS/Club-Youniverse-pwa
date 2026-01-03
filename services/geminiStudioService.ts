@@ -59,7 +59,13 @@ const getNextApiKey = (): string => {
     );
   }
 
-  const key = keys[currentKeyIndex % keys.length];
+  // Safety check: if index is out of bounds (e.g. key removed), reset
+  if (currentKeyIndex >= keys.length) {
+    currentKeyIndex = 0;
+  }
+
+  const key = keys[currentKeyIndex];
+  // Rotate for NEXT call
   currentKeyIndex = (currentKeyIndex + 1) % keys.length;
   return key;
 };
@@ -424,8 +430,10 @@ export const generateDjBanter = async (
     "system_explainer",
   ];
   const weight = Math.random();
+  const isCustomMessage = input.event === "filler" && typeof input.context === "string";
+
   const shouldKeepItStatic =
-    highCostEvents.includes(input.event) && weight < 0.8; // 80% use bank for these
+    highCostEvents.includes(input.event) && weight < 0.8 && !isCustomMessage; // 80% use bank for these, UNLESS it's a custom message
 
   if (shouldKeepItStatic && input.event !== "user_mention") {
     const bankLine = getBankLine(input);
