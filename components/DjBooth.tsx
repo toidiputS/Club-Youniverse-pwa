@@ -23,6 +23,34 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate, onSignOut }) => {
   const [isSending, setIsSending] = useState(false);
   const [isUpdatingTicker, setIsUpdatingTicker] = useState(false);
 
+  // Library & Upload State
+  const [songs, setSongs] = useState<any[]>([]);
+  const [isLoadingSongs, setIsLoadingSongs] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+
+  // Fetch Library
+  const fetchLibrary = async () => {
+    setIsLoadingSongs(true);
+    const { data, error } = await supabase
+      .from("songs")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (data) setSongs(data);
+    setIsLoadingSongs(false);
+  };
+
+  React.useEffect(() => {
+    fetchLibrary();
+  }, []);
+
+  const filteredSongs = songs.filter(s =>
+    s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    s.artist_name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   if (!profile.is_admin) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-zinc-500">
@@ -67,6 +95,64 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate, onSignOut }) => {
     await supabase.from("broadcasts").update({
       radio_state: state
     }).eq("id", "00000000-0000-0000-0000-000000000000");
+  };
+
+  const downloadSong = async (url: string, filename: string) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.setAttribute('download', `${filename}.mp3`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+    } catch (e) {
+      console.error("Download failed:", e);
+      window.open(url, '_blank');
+    }
+  };
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !profile.user_id) return;
+
+    setIsUploading(true);
+    setUploadProgress(0);
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = `${profile.user_id}/${fileName}`;
+
+      const { error: uploadError, data } = await supabase.storage
+        .from('songs')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('songs')
+        .getPublicUrl(filePath);
+
+      // Add to DB
+      await supabase.from('songs').insert({
+        uploader_id: profile.user_id,
+        title: file.name.replace(`.${fileExt}`, ""),
+        artist_name: profile.name || "Anonymous DJ",
+        source: "upload",
+        audio_url: publicUrl,
+        status: "pool"
+      });
+
+      await fetchLibrary();
+      alert("Song uploaded successfully!");
+    } catch (error: any) {
+      alert("Error uploading song: " + error.message);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -186,6 +272,50 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate, onSignOut }) => {
                 <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Active State</span>
                 <span className="px-3 py-1 bg-purple-500/20 text-purple-400 text-[10px] font-black uppercase rounded-full border border-purple-500/20">{radioState}</span>
               </div>
+            </div>
+          </div>
+
+          <div className="bg-zinc-900/80 backdrop-blur-2xl rounded-[2.5rem] border border-white/10 p-8 shadow-2xl flex flex-col gap-6 flex-grow overflow-hidden">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-black text-white uppercase tracking-widest">Song Library</h3>
+              <label className="cursor-pointer group">
+                <input type="file" accept="audio/*" onChange={handleUpload} className="hidden" disabled={isUploading} />
+                <div className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${isUploading ? 'bg-zinc-800 text-zinc-500' : 'bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-900/20'}`}>
+                  {isUploading ? "Uploading..." : "Upload MP3"}
+                </div>
+              </label>
+            </div>
+
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search library..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-purple-500/50"
+              />
+            </div>
+
+            <div className="flex-grow overflow-y-auto space-y-3 pr-2 scrollbar-hide">
+              {isLoadingSongs ? (
+                <div className="text-center py-8 text-zinc-600 text-[10px] font-bold uppercase tracking-widest animate-pulse">Scanning Archive...</div>
+              ) : filteredSongs.map((song) => (
+                <div key={song.id} className="group flex items-center justify-between p-3 bg-white/5 rounded-2xl border border-white/5 hover:border-white/10 transition-all">
+                  <div className="min-w-0 flex-grow">
+                    <h4 className="text-[11px] font-black text-white truncate">{song.title}</h4>
+                    <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-tighter truncate">{song.artist_name}</p>
+                  </div>
+                  <button
+                    onClick={() => downloadSong(song.audio_url, song.title)}
+                    className="ml-4 p-2 bg-white/5 hover:bg-white/10 rounded-lg text-white/40 hover:text-white transition-all opacity-0 group-hover:opacity-100"
+                    title="Download MP3"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="避M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
 
