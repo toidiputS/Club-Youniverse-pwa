@@ -20,7 +20,11 @@ export class LocalAiService {
         try {
             const response = await fetch(LM_STUDIO_URL, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                mode: "cors", // Explicitly enable CORS mode
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer no-key" // Some servers expect this header even if not used
+                },
                 body: JSON.stringify({
                     model: "gemma-3-1b-it.gguf",
                     messages: [
@@ -47,7 +51,11 @@ export class LocalAiService {
         try {
             const response = await fetch(LM_STUDIO_URL, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                mode: "cors",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer no-key"
+                },
                 body: JSON.stringify({
                     model: "gemma-3-1b-it.gguf",
                     messages: [
