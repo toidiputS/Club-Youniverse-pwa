@@ -484,7 +484,16 @@ export class GlobalBroadcastManager {
     if (!hasCorrectSrc) {
       console.log(`🎵 Setting audio source for: ${song.title}`);
       this.audioElement.src = song.audioUrl;
-      this.audioElement.currentTime = startOffset;
+
+      // SYNC FIX: Wait for metadata before seeking to the offset
+      const onMetadataLoaded = () => {
+        if (startOffset > 0) {
+          console.log(`➡️ Syncing to global time: +${startOffset.toFixed(1)}s`);
+          this.audioElement.currentTime = startOffset;
+        }
+        this.audioElement.removeEventListener("loadedmetadata", onMetadataLoaded);
+      };
+      this.audioElement.addEventListener("loadedmetadata", onMetadataLoaded);
 
       // Try to autoplay with robust fallback
       this.play().catch((e) => {
@@ -515,12 +524,14 @@ export class GlobalBroadcastManager {
           }
         });
       }
-      // Optional: If startOffset is explicitly provided and different, maybe seek?
+      // If we're already playing, just check for drift
+      const expectedTime = startOffset;
       if (
-        startOffset > 0 &&
-        Math.abs(this.audioElement.currentTime - startOffset) > 2
+        expectedTime > 0 &&
+        Math.abs(this.audioElement.currentTime - expectedTime) > 2
       ) {
-        this.audioElement.currentTime = startOffset;
+        console.log(`🕒 Drift detected, re-syncing: ${this.audioElement.currentTime.toFixed(1)} -> ${expectedTime.toFixed(1)}`);
+        this.audioElement.currentTime = expectedTime;
       }
     }
 
