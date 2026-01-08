@@ -12,6 +12,8 @@ import { LocalAiService } from "./LocalAiService";
 
 type EventCallback = (...args: any[]) => void;
 
+const QUERY = "*, current_song:songs!current_song_id(*), next_song:songs!next_song_id(*)";
+
 interface BroadcastState {
   nowPlaying: Song | null;
   nextSong: Song | null;
@@ -277,10 +279,10 @@ export class GlobalBroadcastManager {
   private async initializeGlobalState() {
     console.log("🌍 Initializing Global Broadcast Connection...");
 
-    // 1. Fetch initial state (no foreign key join needed)
+    // 1. Fetch initial state with joined song data
     const { data, error } = await supabase
       .from("broadcasts")
-      .select("*")
+      .select(QUERY)
       .limit(1)
       .single();
 
@@ -309,7 +311,7 @@ export class GlobalBroadcastManager {
   private async fetchAndSync() {
     const { data } = await supabase
       .from("broadcasts")
-      .select("*, current_song:songs!current_song_id(*), next_song:songs!next_song_id(*)")
+      .select(QUERY)
       .limit(1)
       .single();
 
@@ -317,8 +319,12 @@ export class GlobalBroadcastManager {
   }
 
   private syncStateFromRemote(data: any) {
-    const remoteSong = data.current_song as Song | null;
-    const nextSong = data.next_song as Song | null;
+    const remoteSong = data.current_song
+      ? PersistentRadioService.mapDbToApp(data.current_song)
+      : null;
+    const nextSong = data.next_song
+      ? PersistentRadioService.mapDbToApp(data.next_song)
+      : null;
     const remoteState = data.radio_state as RadioState;
 
     // Sync Radio State
@@ -338,12 +344,16 @@ export class GlobalBroadcastManager {
 
     // Sync Now Playing
     if (remoteSong?.id !== this.state.nowPlaying?.id) {
-      console.log(`🎵 Global Song Update: ${remoteSong?.title}`);
+      console.log(`🎵 Global Song Update: ${data.current_song?.title || 'Unknown'}`);
+      const mappedSong = data.current_song ? PersistentRadioService.mapDbToApp(data.current_song) : null;
       const offset = this.calculateOffset(data.song_started_at);
-      this.setNowPlaying(remoteSong, offset);
+      this.setNowPlaying(mappedSong, offset);
     } else {
       // Check for drift > 2 seconds
       const expectedTime = this.calculateOffset(data.song_started_at);
+
+      // Secondary check: if the song started 5 minutes ago and it's a 3 min song, don't just sync, let watchdog handle it.
+      // But for drift:
       const drift = Math.abs(this.audioElement.currentTime - expectedTime);
 
       if (drift > 2 && this.state.isPlaying) {

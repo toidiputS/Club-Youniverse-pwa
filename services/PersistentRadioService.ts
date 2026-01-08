@@ -16,11 +16,33 @@ export class PersistentRadioService {
         // 1. Ensure Box is populated
         await this.populateTheBox();
 
-        // 2. If nothing is playing, try to cycle next to now
-        if (!nowPlaying) {
+        // 2. Fetch the broadcast source of truth
+        const { data: broadcast } = await supabase
+            .from("broadcasts")
+            .select("song_started_at")
+            .eq("id", "00000000-0000-0000-0000-000000000000")
+            .single();
+
+        // 3. If nothing is playing in memory or DB, kickstart
+        if (!nowPlaying || !broadcast?.song_started_at) {
             console.log("🛠️ Watchdog: No song playing. Attempting kickstart...");
             return await this.cycleNextToNow();
         }
+
+        // 4. "ZOMBIE PREVENTION": If current song should be finished by now, force transition
+        if (nowPlaying.durationSec) {
+            const startedAt = new Date(broadcast.song_started_at).getTime();
+            const now = Date.now();
+            const elapsed = (now - startedAt) / 1000;
+            const margin = 10; // 10 second safety margin
+
+            if (elapsed > nowPlaying.durationSec + margin) {
+                console.log(`🧟 Watchdog: Zombie detected! (${elapsed.toFixed(1)}s elapsed for ${nowPlaying.durationSec}s song). Force transitioning...`);
+                await this.handleSongEnded(nowPlaying);
+                return await this.cycleNextToNow();
+            }
+        }
+
         return null;
     }
 
@@ -209,7 +231,7 @@ export class PersistentRadioService {
     /**
      * Helper to map DB song to App song structure
      */
-    private static mapDbToApp(dbSong: any): Song {
+    public static mapDbToApp(dbSong: any): Song {
         return {
             id: dbSong.id,
             uploaderId: dbSong.uploader_id,
