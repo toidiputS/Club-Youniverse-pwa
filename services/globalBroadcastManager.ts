@@ -6,8 +6,9 @@
  */
 
 import { supabase } from "./supabaseClient";
-import type { Song, RadioState } from "../types";
+import type { Song, RadioState, ChatMessage } from "../types";
 import { PersistentRadioService } from "./PersistentRadioService";
+import { LocalAiService } from "./LocalAiService";
 
 type EventCallback = (...args: any[]) => void;
 
@@ -238,6 +239,27 @@ export class GlobalBroadcastManager {
     this.simulationInterval = window.setInterval(async () => {
       if (this.isLeaderLocal && this.state.isPlaying) {
         await PersistentRadioService.runSimulationStep();
+
+        // OCCASIONAL AI ROAST (Leader only)
+        // ~10% chance every 800ms
+        if (Math.random() > 0.9) {
+          const { data: boxSongs } = await supabase.from("songs").select("*").eq("status", "in_box").limit(2);
+          if (boxSongs && boxSongs.length > 0) {
+            const target = boxSongs[Math.floor(Math.random() * boxSongs.length)];
+            const roast = await LocalAiService.generateRoast(target);
+
+            await supabase.channel('club-chat').send({
+              type: 'broadcast',
+              event: 'new_message',
+              payload: {
+                id: `dj-roast-${Date.now()}`,
+                user: { name: "THE ARCHITECT", isAdmin: true },
+                text: roast,
+                timestamp: Date.now()
+              } as ChatMessage
+            });
+          }
+        }
       }
     }, 800);
   }

@@ -4,7 +4,8 @@
  */
 
 import { supabase } from "./supabaseClient";
-import type { Song, RadioState } from "../types";
+import type { Song, ChatMessage } from "../types";
+import { LocalAiService } from "./LocalAiService";
 
 export class PersistentRadioService {
     /**
@@ -60,26 +61,24 @@ export class PersistentRadioService {
 
             console.log(`🏆 Winner: ${winner.title} (${winner.upvotes} votes)`);
 
-            // 3. Move winner to 'now_playing' via 'next_play' bridge or directly?
-            // The plan says BoxWin -> NextPlay -> NowPlaying.
-            // But if we are at the end of a song, we want to play it NOW.
-            // Let's check 'next_play' first. If 'next_play' exists (e.g. a debut), it takes priority.
+            // AI BANTER: Generate speech for the winner
+            try {
+                const banter = await LocalAiService.generateDJSpeech(winner, losers);
+                console.log("🎙️ DJ Banter:", banter);
 
-            const { data: nextPlaySong } = await supabase
-                .from("songs")
-                .select("*")
-                .eq("status", "next_play")
-                .limit(1)
-                .single();
-
-            if (nextPlaySong) {
-                console.log(`🆕 NextPlay priority detected: ${nextPlaySong.title}`);
-                // Winner of box still gets their star but goes to pool? 
-                // Or do they stay 'next_play' for next round?
-                // Let's follow: Box winner goes to NextPlay if NextPlay is empty.
-                // If NextPlay is NOT empty, winner goes to pool with their star? 
-                // Actually, if NextPlay is occupied, the winner should probably just wait.
-                // But for simplicity, let's say the winner becomes NowPlaying if NextPlay is empty.
+                // Broadcast banter to all clients via Supabase Realtime
+                await supabase.channel('club-chat').send({
+                    type: 'broadcast',
+                    event: 'new_message',
+                    payload: {
+                        id: `dj-${Date.now()}`,
+                        user: { name: "THE ARCHITECT", isAdmin: true },
+                        text: banter,
+                        timestamp: Date.now()
+                    } as ChatMessage
+                });
+            } catch (e) {
+                console.warn("AI Banter generation failed", e);
             }
 
             // Process Winner
