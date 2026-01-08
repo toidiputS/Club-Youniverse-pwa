@@ -1,94 +1,57 @@
 /**
- * @file This component renders the header for the main radio view.
- * It includes the application title and buttons to navigate back to the studio and toggle the chat panel.
+ * @file Header Component - Simplified for Club Youniverse Launch.
  */
 
 import React from "react";
-import type { View } from "../types";
-import { VolumeControl } from "./VolumeControl";
+import type { View, Profile } from "../types";
 
 interface HeaderProps {
   onNavigate: (view: View) => void;
-  onToggleChat: () => void;
-  isChatVisible: boolean;
+  onSignOut: () => void;
+  profile: Profile;
 }
 
-export const Header: React.FC<HeaderProps> = ({
-  onNavigate,
-  onToggleChat,
-  isChatVisible,
-}) => {
+export const Header: React.FC<HeaderProps> = ({ onNavigate, onSignOut, profile }) => {
   return (
-    <header className="flex justify-between items-center px-2 py-2 flex-shrink-0">
-      <div>
-        <h1 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-[var(--accent-primary)] via-[var(--accent-secondary)] to-[var(--accent-primary)] font-display">
-          Club Youniverse
-        </h1>
-        <p className="text-[10px] text-[var(--text-secondary)]">
-          24/7 AI Radio
-        </p>
-      </div>
-      <div className="flex items-center gap-2">
-        <VolumeControl />
-        {/* Button to show/hide the chat panel on larger screens */}
-        <button
-          onClick={onToggleChat}
-          className="p-2 rounded-full hover:bg-white/10 transition-colors hidden lg:block"
-          title={isChatVisible ? "Hide Chat" : "Show Chat"}
+    <header className="flex items-center justify-between p-4 bg-zinc-900/40 backdrop-blur-xl rounded-[2rem] border border-white/10 shadow-xl">
+      <div className="flex items-center gap-4">
+        <div
+          className="w-12 h-12 bg-gradient-to-br from-purple-500 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-purple-500/20 cursor-pointer hover:rotate-6 transition-transform"
+          onClick={() => onNavigate("club")}
         >
-          {isChatVisible ? (
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6 text-gray-300"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M17 8l4 4m0 0l-4 4m4-4H3"
-              />
-            </svg>
-          ) : (
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6 text-gray-300"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 12h16M4 12l4-4m-4 4l4 4"
-              />
-            </svg>
-          )}
-        </button>
-        {/* Button to navigate back to the main studio/dashboard */}
-        <button
-          onClick={() => {
-            console.log("Navigating to studio...");
-            onNavigate("studio");
-          }}
-          className="text-sm bg-[var(--accent-secondary)] text-white font-bold py-2 px-4 rounded-lg hover:bg-[var(--accent-primary)] transition-colors relative z-50 pointer-events-auto"
-        >
-          &larr; Back to Studio
-        </button>
+          <span className="text-white text-2xl font-black">Y</span>
+        </div>
+        <div className="flex flex-col">
+          <h1 className="text-xl font-black text-white tracking-tighter leading-none">CLUB YOUNIVERSE</h1>
+          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Live from the Void</span>
+        </div>
       </div>
-      {/* CSS for the glowing text effect on the title */}
-      <style>{`
-                @keyframes glow {
-                    0%, 100% { text-shadow: 0 0 5px var(--accent-primary), 0 0 10px var(--accent-secondary); }
-                    50% { text-shadow: 0 0 10px var(--accent-primary), 0 0 20px var(--accent-secondary); }
-                }
-                .animate-glow {
-                    animation: glow 4s ease-in-out infinite;
-                }
-            `}</style>
+
+      <div className="flex items-center gap-6">
+        {profile.is_admin && (
+          <button
+            onClick={() => onNavigate("dj-booth")}
+            className="px-5 py-2.5 bg-white/5 hover:bg-white/10 text-white text-xs font-black uppercase tracking-widest rounded-xl transition-all border border-white/10"
+          >
+            DJ Booth
+          </button>
+        )}
+
+        <div className="flex items-center gap-3">
+          <div className="flex flex-col items-end">
+            <span className="text-xs font-black text-white">{profile.name}</span>
+            <button
+              onClick={onSignOut}
+              className="text-[9px] font-black text-red-500 uppercase tracking-widest hover:text-red-400 transition-colors"
+            >
+              Sign Out
+            </button>
+          </div>
+          <div className="w-10 h-10 rounded-full bg-zinc-800 border border-white/10 overflow-hidden">
+            <img src={profile.avatar_url || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${profile.user_id}`} alt="Avatar" />
+          </div>
+        </div>
+      </div>
     </header>
   );
 };

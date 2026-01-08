@@ -1,143 +1,129 @@
 /**
- * @file This component renders the UI for "The Box," the core voting game of the radio.
- * It displays three candidate songs and allows users to vote, play snippets, and download tracks.
+ * @file TheBox Component - The 2-song voting mechanism.
  */
 
-import React, { useContext } from "react";
+import React, { useContext, useState, useEffect } from "react";
 import { RadioContext } from "../contexts/AudioPlayerContext";
+import { supabase } from "../services/supabaseClient";
 import type { Song } from "../types";
 
-interface TheBoxProps {
-  candidates: Song[];
-  onVote: (songId: string) => void;
-  isVotingActive: boolean;
-  userHasVoted: boolean;
-  voteCounts: Record<string, number>;
-}
+export const TheBox: React.FC = () => {
+  const context = useContext(RadioContext);
+  if (!context) return null;
 
-export const TheBox: React.FC<TheBoxProps> = ({
-  candidates,
-  onVote,
-  isVotingActive,
-  userHasVoted,
-  voteCounts,
-}) => {
-  const { playSnippet, stopSnippet, snippetPlayingUrl } =
-    useContext(RadioContext);
+  const { radioState } = context;
+  const [candidates, setCandidates] = useState<Song[]>([]);
+  const [votedId, setVotedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Fetch 'in_box' songs from DB
+    const fetchBox = async () => {
+      const { data } = await supabase
+        .from("songs")
+        .select("*")
+        .eq("status", "in_box")
+        .limit(2);
+
+      if (data) {
+        // Map snake_case to camelCase
+        setCandidates(data.map((raw: any) => ({
+          id: raw.id,
+          title: raw.title,
+          artistName: raw.artist_name,
+          audioUrl: raw.audio_url,
+          coverArtUrl: raw.cover_art_url,
+          upvotes: raw.upvotes || 0,
+          status: raw.status,
+          uploaderId: raw.uploader_id,
+          source: raw.source,
+          durationSec: raw.duration_sec,
+          stars: raw.stars,
+          boxRoundsSeen: raw.box_rounds_seen,
+          boxRoundsLost: raw.box_rounds_lost,
+          boxAppearanceCount: raw.box_appearance_count,
+          playCount: raw.play_count,
+          downvotes: raw.downvotes,
+          lastPlayedAt: raw.last_played_at,
+          createdAt: raw.created_at
+        })));
+      }
+    };
+
+    fetchBox();
+
+    // Subscribe to changes
+    const channel = supabase.channel('box-updates')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'songs', filter: 'status=eq.in_box' }, () => {
+        fetchBox();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [radioState]);
+
+  const handleVote = async (songId: string) => {
+    if (votedId) return;
+    setVotedId(songId);
+
+    // Optimistic / Real update
+    const { data: song } = await supabase.from("songs").select("upvotes").eq("id", songId).single();
+    if (song) {
+      await supabase.from("songs").update({ upvotes: (song.upvotes || 0) + 10 }).eq("id", songId);
+    }
+  };
+
+  if (candidates.length < 2) {
+    return (
+      <div className="flex flex-col items-center justify-center p-8 bg-zinc-900/30 rounded-3xl border border-white/5 h-64">
+        <div className="text-zinc-600 italic">Curating The Box...</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full max-w-3xl mx-auto h-[120px] flex gap-1.5 items-center justify-center">
-      {candidates.map((song) => (
-        <div
-          key={song.id}
-          className="
-                        relative flex-1 hover:flex-[3] 
-                        transition-[flex] duration-500 ease-out 
-                        h-full rounded-xl overflow-hidden 
-                        cursor-pointer group 
-                        border border-white/5 hover:border-[#00ffeb]/50 
-                        bg-gradient-to-br from-[#1a1a1a] to-black
-                        hover:shadow-[0_4px_30px_rgba(0,255,235,0.15)]
-                    "
-          onClick={() => !userHasVoted && onVote(song.id)}
-        >
-          {/* Background Glow / Image */}
-          <div className="absolute inset-0">
-            <img
-              src={song.coverArtUrl}
-              alt={song.title}
-              className="w-full h-full object-cover opacity-20 group-hover:opacity-40 transition-opacity duration-500 grayscale group-hover:grayscale-0"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80" />
-          </div>
-
-          {/* Content Container */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center p-2">
-            {/* COLLAPSED STATE: Vertical Text */}
-            <div className="absolute inset-0 flex items-center justify-center transition-opacity duration-300 group-hover:opacity-0 delay-0 group-hover:delay-0 opacity-100">
-              <div className="text-center px-1">
-                <h4 className="text-xs font-bold text-white/90 leading-tight truncate">
-                  {song.title}
-                </h4>
-                <p className="text-[10px] text-[#00ffeb]/80 uppercase tracking-wide truncate">
-                  {song.artistName}
-                </p>
-              </div>
-            </div>
-
-            {/* EXPANDED STATE: Full Details */}
-            <div
-              className="
-                            opacity-0 group-hover:opacity-100 
-                            transition-all duration-500 delay-100 
-                            transform translate-y-4 group-hover:translate-y-0
-                            flex flex-col items-center text-center gap-1 w-full
-                        "
-            >
-              {/* Snippet Toggle */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (snippetPlayingUrl === song.audioUrl) {
-                    stopSnippet();
-                  } else {
-                    playSnippet(song.audioUrl);
-                  }
-                }}
-                className="w-8 h-8 rounded-full bg-white/10 hover:bg-[#00ffeb]/20 flex items-center justify-center backdrop-blur-md border border-white/10 transition-colors"
-              >
-                {snippetPlayingUrl === song.audioUrl ? (
-                  <div className="w-1.5 h-1.5 bg-[#00ffeb] rounded-sm animate-pulse" />
-                ) : (
-                  <svg
-                    className="w-4 h-4 text-[#00ffeb]"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-                    />
-                  </svg>
-                )}
-              </button>
-
-              <div>
-                <h3 className="text-sm md:text-base font-black text-white leading-tight tracking-tight drop-shadow-md">
-                  {song.title}
-                </h3>
-                <p className="text-[10px] font-bold text-[#00ffeb] tracking-widest uppercase">
-                  {song.artistName}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-1 text-[10px] text-yellow-500/80">
-                {"⭐".repeat(Math.min(5, song.stars || 0))}
-              </div>
-
-              {/* Vote Button */}
-              <button
-                disabled={!isVotingActive || userHasVoted}
-                className={`
-                    px-4 py-1 rounded-full font-bold text-[10px] uppercase tracking-widest
-                    transition-all duration-300
-                    ${userHasVoted
-                    ? "bg-white/10 text-white/30 cursor-not-allowed"
-                    : "bg-[#00ffeb] text-black hover:bg-white hover:shadow-[0_0_20px_#00ffeb]"
-                  }
-                `}
-              >
-                {userHasVoted
-                  ? (voteCounts[song.id] ? `${voteCounts[song.id]} Votes` : "Voted")
-                  : "VOTE"}
-              </button>
-            </div>
-          </div>
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between px-2">
+        <h3 className="text-sm font-bold uppercase tracking-widest text-zinc-500">The Box</h3>
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+          <span className="text-[10px] font-black text-red-500 uppercase tracking-tighter">Live Vote</span>
         </div>
-      ))}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        {candidates.map((song) => (
+          <button
+            key={song.id}
+            onClick={() => handleVote(song.id)}
+            disabled={!!votedId}
+            className={`group relative overflow-hidden flex items-center gap-3 p-3 rounded-2xl border transition-all duration-300 ${votedId === song.id
+              ? 'border-purple-500 bg-purple-500/10'
+              : 'border-white/5 bg-white/5 hover:border-white/20 hover:scale-[1.02]'
+              }`}
+          >
+            {/* Minimal Thumbnail */}
+            <div className="relative w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
+              <img
+                src={song.coverArtUrl || `https://picsum.photos/seed/${song.id}/100`}
+                className={`w-full h-full object-cover transition-opacity duration-500 ${votedId && votedId !== song.id ? 'opacity-20 grayscale' : ''}`}
+                alt={song.title}
+              />
+            </div>
+
+            <div className="flex flex-col min-w-0 flex-grow text-left">
+              <h4 className="text-sm font-black text-white leading-tight truncate">{song.title}</h4>
+              <p className="text-zinc-500 text-[10px] font-bold truncate uppercase">{song.artistName}</p>
+
+              <div className="mt-1 flex items-center justify-between">
+                <span className="text-[10px] font-black text-white/40">{song.upvotes || 0} <span className="text-[8px] opacity-50 uppercase tracking-tighter">Votes</span></span>
+                {votedId === song.id && (
+                  <span className="text-[8px] font-black text-purple-400 uppercase">Voted</span>
+                )}
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
     </div>
   );
 };

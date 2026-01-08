@@ -7,11 +7,13 @@
 
 import { supabase } from "./supabaseClient";
 import type { Song, RadioState } from "../types";
+import { PersistentRadioService } from "./PersistentRadioService";
 
 type EventCallback = (...args: any[]) => void;
 
 interface BroadcastState {
   nowPlaying: Song | null;
+  nextSong: Song | null;
   radioState: RadioState;
   currentTime: number;
   volume: number;
@@ -29,6 +31,7 @@ export class GlobalBroadcastManager {
   private eventListeners: Map<string, Set<EventCallback>>;
   private state: BroadcastState;
   private timeUpdateInterval: number | null = null;
+  private simulationInterval: number | null = null;
 
   // Leader Election
   private userId: string | null = null;
@@ -36,9 +39,20 @@ export class GlobalBroadcastManager {
   private heartbeatInterval: number | null = null;
 
   private constructor() {
+    // CRITICAL: Check if there's already an audio element playing from a leaked instance
+    // (Happens during Vite HMR/Hot Reloads)
+    const existingAudio = (globalThis as any).__CLUB_YOUNIVERSE_AUDIO__;
+    if (existingAudio) {
+      console.log("🛑 GlobalBroadcastManager: Cleaning up leaked audio instance...");
+      existingAudio.pause();
+      existingAudio.src = "";
+      existingAudio.load();
+    }
+
     // Create the audio element
     this.audioElement = new Audio();
     this.audioElement.preload = "auto";
+    (globalThis as any).__CLUB_YOUNIVERSE_AUDIO__ = this.audioElement;
 
     // Initialize event listeners map
     this.eventListeners = new Map();
@@ -65,10 +79,13 @@ export class GlobalBroadcastManager {
    * Get the singleton instance
    */
   public static getInstance(): GlobalBroadcastManager {
-    if (!GlobalBroadcastManager.instance) {
-      GlobalBroadcastManager.instance = new GlobalBroadcastManager();
+    // During HMR, the static 'instance' might be lost if the module is re-executed,
+    // but globalThis persists.
+    if (!(globalThis as any).__GLOBAL_BROADCAST_MANAGER_INSTANCE__) {
+      (globalThis as any).__GLOBAL_BROADCAST_MANAGER_INSTANCE__ = new GlobalBroadcastManager();
     }
-    return GlobalBroadcastManager.instance;
+    GlobalBroadcastManager.instance = (globalThis as any).__GLOBAL_BROADCAST_MANAGER_INSTANCE__;
+    return GlobalBroadcastManager.instance!;
   }
 
   private async initLeaderElection() {
@@ -140,6 +157,12 @@ export class GlobalBroadcastManager {
           .from("broadcasts")
           .update({ last_heartbeat: now.toISOString() })
           .eq("leader_id", this.userId); // Safety check
+
+        // HEALTH CHECK
+        const newSong = await PersistentRadioService.checkRadioHealth(this.state.nowPlaying);
+        if (newSong && newSong.id !== this.state.nowPlaying?.id) {
+          await this.setNowPlaying(newSong);
+        }
       } else if (isCurrentLeaderDead || !data.leader_id) {
         // Leader is dead or missing. Claim it!
         console.log(
@@ -164,6 +187,7 @@ export class GlobalBroadcastManager {
           this.isLeaderLocal = true;
           console.log("👑 Leadership CLAIMED!");
           this.emit("leaderChanged", true);
+          this.startSimulation();
         } else {
           console.error("❌ Leadership claim FAILED:", claimError);
         }
@@ -173,6 +197,7 @@ export class GlobalBroadcastManager {
           console.log("👑 Leadership LOST.");
           this.isLeaderLocal = false;
           this.emit("leaderChanged", false);
+          this.stopSimulation();
         }
       }
     } catch (e) {
@@ -199,12 +224,29 @@ export class GlobalBroadcastManager {
 
     return {
       nowPlaying: null,
-      radioState: "DJ_BANTER_INTRO",
+      nextSong: null,
+      radioState: "POOL",
       currentTime: 0,
       volume,
       isMuted,
       isPlaying: false,
     };
+  }
+
+  private startSimulation() {
+    if (this.simulationInterval) clearInterval(this.simulationInterval);
+    this.simulationInterval = window.setInterval(async () => {
+      if (this.isLeaderLocal && this.state.isPlaying) {
+        await PersistentRadioService.runSimulationStep();
+      }
+    }, 800);
+  }
+
+  private stopSimulation() {
+    if (this.simulationInterval) {
+      clearInterval(this.simulationInterval);
+      this.simulationInterval = null;
+    }
   }
 
   /**
@@ -245,7 +287,7 @@ export class GlobalBroadcastManager {
   private async fetchAndSync() {
     const { data } = await supabase
       .from("broadcasts")
-      .select("*, current_song:songs(*)")
+      .select("*, current_song:songs!current_song_id(*), next_song:songs!next_song_id(*)")
       .limit(1)
       .single();
 
@@ -254,6 +296,7 @@ export class GlobalBroadcastManager {
 
   private syncStateFromRemote(data: any) {
     const remoteSong = data.current_song as Song | null;
+    const nextSong = data.next_song as Song | null;
     const remoteState = data.radio_state as RadioState;
 
     // Sync Radio State
@@ -263,6 +306,12 @@ export class GlobalBroadcastManager {
       );
       this.state.radioState = remoteState;
       this.emit("radioStateChanged", remoteState);
+    }
+
+    // Sync Next Song
+    if (nextSong?.id !== this.state.nextSong?.id) {
+      this.state.nextSong = nextSong;
+      this.emit("nextSongChanged", nextSong);
     }
 
     // Sync Now Playing
@@ -276,9 +325,13 @@ export class GlobalBroadcastManager {
       const drift = Math.abs(this.audioElement.currentTime - expectedTime);
 
       if (drift > 2 && this.state.isPlaying) {
-        // console.log(`🕰️ Drift Correction: ${this.audioElement.currentTime.toFixed(1)}s -> ${expectedTime.toFixed(1)}s`);
         this.audioElement.currentTime = expectedTime;
       }
+    }
+
+    // Sync Site Commands
+    if (data.site_command) {
+      this.emit("siteCommandReceived", data.site_command);
     }
   }
 
@@ -320,9 +373,28 @@ export class GlobalBroadcastManager {
       this.state.isPlaying = false;
       this.emit("playbackStateChanged", false);
     });
-    this.audioElement.addEventListener("ended", () => {
+    this.audioElement.addEventListener("ended", async () => {
       this.state.isPlaying = false;
       this.emit("songEnded", this.state.nowPlaying);
+
+      // LEADER LOGIC: Handle song end and transition
+      if (this.isLeaderLocal) {
+        console.log("👑 Leader: Song ended. Transitioning...");
+        const previousSong = this.state.nowPlaying;
+
+        // 1. Clear nowPlaying in manager immediately to prevent loops
+        this.state.nowPlaying = null;
+        this.emit("nowPlayingChanged", null);
+
+        // 2. Let the service handle the DB side (move winner to next_play, etc.)
+        await PersistentRadioService.handleSongEnded(previousSong);
+
+        // 3. Move next_play to now_playing in DB and get the song
+        const nextSong = await PersistentRadioService.cycleNextToNow();
+        if (nextSong) {
+          await this.setNowPlaying(nextSong);
+        }
+      }
     });
     this.audioElement.addEventListener("error", (e) => {
       const errorDetails = this.audioElement.error;
@@ -383,55 +455,45 @@ export class GlobalBroadcastManager {
     }
 
     // CHECK: Is this the same song?
-    // If IDs match, we might be updating metadata (stars, plays).
-    // In that case, DO NOT reset audio src or time.
-    const isSameSong =
-      this.audioElement.src === song.audioUrl ||
-      this.state.nowPlaying?.id === song.id;
+    // We check both the ID and the actual audio source
+    const hasCorrectSrc = this.audioElement.src === song.audioUrl;
+    const isSameId = this.state.nowPlaying?.id === song.id;
 
-    if (!isSameSong) {
-      console.log(`🎵 Playing new song: ${song.title}`);
+    if (!hasCorrectSrc) {
+      console.log(`🎵 Setting audio source for: ${song.title}`);
       this.audioElement.src = song.audioUrl;
       this.audioElement.currentTime = startOffset;
+
       // Try to autoplay with robust fallback
       this.play().catch((e) => {
-        console.warn("Initial autoplay blocked, forcing reload:", e);
-        const currentSrc = this.audioElement.src;
-        if (currentSrc) {
-          this.audioElement.src = currentSrc;
+        if (e.name === 'NotAllowedError') {
+          console.warn("🚫 Autoplay blocked by browser. User interaction required.");
+          this.emit("autoplayBlocked", true);
+        } else {
+          console.warn("Initial playback failed, forcing reload:", e);
           this.audioElement.load();
-          const playPromise = this.audioElement.play();
-          if (playPromise) {
-            playPromise.catch(e2 => {
-              console.error("Force play (new song) failed:", e2);
-              this.emit("autoplayBlocked", null); // Notify UI to show overlay
-            });
-          }
+          this.play().catch(e2 => {
+            console.error("Force play (new song) failed:", e2);
+          });
         }
       });
     } else {
       console.log(`🔄 Updating metadata for current song: ${song.title}`);
 
       // FIX: Ensure it's actually playing!
-      // If we reconnected to an existing state, we might have the right SRC but be PAUSED.
       if (this.audioElement.paused) {
-        console.log(`▶️ Resuming playback... (Vol: ${this.audioElement.volume}, Muted: ${this.audioElement.muted})`);
-
+        console.log(`▶️ Attempting to resume playback...`);
         this.play().catch((e) => {
-          console.warn("Simple resume failed, forcing reload:", e);
-          // Robust reload: re-assign src and call load()
-          const currentSrc = this.audioElement.src;
-          this.audioElement.src = currentSrc;
-          this.audioElement.load();
-          const playPromise = this.audioElement.play();
-          if (playPromise) {
-            playPromise.catch((e2) => console.error("Force play failed:", e2));
+          if (e.name === 'NotAllowedError') {
+            this.emit("autoplayBlocked", true);
+          } else {
+            console.warn("Simple resume failed, forcing reload:", e);
+            this.audioElement.load();
+            this.play().catch((e2) => console.error("Force play failed:", e2));
           }
         });
       }
-
       // Optional: If startOffset is explicitly provided and different, maybe seek?
-      // For now, assume metadata updates don't want to seek unless explicit.
       if (
         startOffset > 0 &&
         Math.abs(this.audioElement.currentTime - startOffset) > 2
@@ -442,16 +504,9 @@ export class GlobalBroadcastManager {
 
     this.emit("nowPlayingChanged", song);
 
-    // PERSIST TO GLOBAL STATE (Only if Leader, or if specifically forced?)
-    // In the new architecture, Client -> Radio.tsx -> (Checks Leader) -> calls setNowPlaying
-    // But setNowPlaying is also called by syncFromRemote (follower).
-    // WE MUST DISTINGUISH between "I am setting this because I am the source" vs "I am setting this because I was told to".
-
-    // Actually, internal sync calls should NOT call persistBroadcastState.
-    // Public calls (from Radio.tsx) imply an INTENT to change state.
-    // So we keep persist logic here, but guard it with isLeader checks inside persist.
+    // PERSIST TO GLOBAL STATE (Only if Leader)
     if (this.isLeaderLocal) {
-      await this.persistBroadcastState(!isSameSong);
+      await this.persistBroadcastState(!hasCorrectSrc || !isSameId);
     }
   }
 
@@ -465,6 +520,7 @@ export class GlobalBroadcastManager {
     try {
       const payload: any = {
         current_song_id: this.state.nowPlaying?.id || null,
+        next_song_id: this.state.nextSong?.id || null,
         radio_state: this.state.radioState,
         updated_at: new Date().toISOString(),
       };
@@ -494,6 +550,16 @@ export class GlobalBroadcastManager {
   public getNowPlaying() {
     return this.state.nowPlaying;
   }
+  public getNextSong() {
+    return this.state.nextSong;
+  }
+  public async setNextSong(song: Song | null) {
+    this.state.nextSong = song;
+    this.emit("nextSongChanged", song);
+    if (this.isLeaderLocal) {
+      await this.persistBroadcastState();
+    }
+  }
   public getRadioState() {
     return this.state.radioState;
   }
@@ -501,8 +567,9 @@ export class GlobalBroadcastManager {
     return this.audioElement.currentTime;
   }
   public isPlaying() {
-    return this.state.isPlaying;
+    return !this.audioElement.paused;
   }
+
   public getVolume() {
     return this.state.volume;
   }
@@ -513,11 +580,17 @@ export class GlobalBroadcastManager {
   public async play() {
     if (this.audioElement.paused && this.state.nowPlaying) {
       await this.audioElement.play();
+      this.state.isPlaying = true;
+      this.emit("playbackStateChanged", true);
     }
   }
 
   public pause() {
-    if (!this.audioElement.paused) this.audioElement.pause();
+    if (!this.audioElement.paused) {
+      this.audioElement.pause();
+      this.state.isPlaying = false;
+      this.emit("playbackStateChanged", false);
+    }
   }
 
   public async togglePlay() {

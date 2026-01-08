@@ -3,7 +3,7 @@
  * Run with: npx tsx reset_song_statuses.ts
  */
 
-import { supabase } from "./services/supabaseClient";
+import { supabase } from "../services/supabaseClient";
 
 async function resetSongStatuses() {
   console.log("🔧 Resetting all song statuses to pool...\n");

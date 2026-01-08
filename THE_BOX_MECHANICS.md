@@ -3,11 +3,11 @@
 ## Flow Overview
 
 1. **First song uploaded** → Auto-plays immediately (no voting)
-2. **Songs 2-4 uploaded** → Triggers The Box with 3 candidates
-3. **Voting window** → 20 seconds
+2. **Songs 2-4 uploaded** → Triggers The Box with 2 candidates
+3. **Voting window** → current song start to finish. voting ends when NowPlay song ends.
 4. **Winner** → Gains +1 star, plays next
 5. **Losers (2 songs)** → Each loses -1 star, returns to pool
-6. **Next round** → Fresh 3 from pool
+6. **Next round** → Fresh 2 from pool
 
 ## Star System
 

@@ -1,4 +1,4 @@
-import { supabase } from "./services/supabaseClient";
+import { supabase } from "../services/supabaseClient";
 
 async function verify() {
   console.log("🔍 Checking for broadcasts table...");

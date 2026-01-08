@@ -17,6 +17,26 @@ if (!rootElement) {
 // Register the minimal, safe service worker for PWA support
 registerServiceWorker();
 
+// Nuclear option to kill any stray audio from previous HMR sessions
+if (typeof window !== 'undefined') {
+  const killStrayAudio = () => {
+    const audios = document.querySelectorAll('audio');
+    audios.forEach(a => {
+      a.pause();
+      a.src = "";
+      a.remove();
+    });
+    // Also check globalThis
+    const leakedAudio = (globalThis as any).__CLUB_YOUNIVERSE_AUDIO__;
+    if (leakedAudio) {
+      leakedAudio.pause();
+      leakedAudio.src = "";
+    }
+  };
+  // We don't call it immediately because we might kill the legitimate one on a soft reload
+  // But if this is the main entry point re-running, it's safer to be aggressive.
+}
+
 // Create a React root and render the main App component.
 const root = ReactDOM.createRoot(rootElement);
 root.render(

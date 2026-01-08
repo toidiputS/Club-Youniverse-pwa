@@ -3,7 +3,7 @@
  * Run with: npx tsx verify_songs.ts
  */
 
-import { supabase } from "./services/supabaseClient";
+import { supabase } from "../services/supabaseClient";
 
 async function verifySongs() {
   console.log("🔍 Checking songs table...\n");
