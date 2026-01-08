@@ -156,12 +156,12 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate, onSignOut }) => {
   };
 
   return (
-    <div className="flex flex-col h-full w-full gap-8 p-4 sm:p-8 max-w-7xl mx-auto animate-in slide-in-from-right-10 duration-700">
+    <div className="flex flex-col min-h-full w-full gap-8 p-4 sm:p-8 max-w-7xl mx-auto animate-in slide-in-from-right-10 duration-700 overflow-y-auto">
       <Header onNavigate={onNavigate} onSignOut={onSignOut} profile={profile} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 flex-grow min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 flex-grow">
         {/* Left Column: Radio State Control */}
-        <div className="lg:col-span-8 flex flex-col gap-6 overflow-y-auto scrollbar-hide">
+        <div className="lg:col-span-8 flex flex-col gap-6">
           <div className="bg-zinc-900/80 backdrop-blur-2xl rounded-[2.5rem] border border-white/10 p-8 shadow-2xl">
             <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-3">
               <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
@@ -296,7 +296,7 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate, onSignOut }) => {
               />
             </div>
 
-            <div className="flex-grow overflow-y-auto space-y-3 pr-2 scrollbar-hide">
+            <div className="flex-grow overflow-y-auto space-y-3 pr-2">
               {isLoadingSongs ? (
                 <div className="text-center py-8 text-zinc-600 text-[10px] font-bold uppercase tracking-widest animate-pulse">Scanning Archive...</div>
               ) : filteredSongs.map((song) => (
