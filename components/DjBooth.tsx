@@ -29,6 +29,7 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate, onSignOut }) => {
   const [songs, setSongs] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   // Fetch Library
   const fetchLibrary = async () => {
@@ -116,40 +117,83 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate, onSignOut }) => {
     const file = e.target.files?.[0];
     if (!file || !profile.user_id) return;
 
+    // Check file type
+    if (!file.type.startsWith('audio/')) {
+      alert("Please upload an audio file (MP3, WAV, etc.)");
+      return;
+    }
+
     setIsUploading(true);
-    setIsUploading(true);
+    setUploadProgress(10); // Start progress
 
     try {
+      // 1. Get Duration before uploading
+      const duration = await new Promise<number>((resolve) => {
+        const audio = new Audio();
+        audio.src = URL.createObjectURL(file);
+        audio.onloadedmetadata = () => {
+          resolve(Math.round(audio.duration));
+          URL.revokeObjectURL(audio.src);
+        };
+        audio.onerror = () => resolve(180); // Fallback to 3 mins
+      });
+
+      setUploadProgress(30);
+
+      // 2. Upload to Storage
       const fileExt = file.name.split('.').pop();
-      const fileName = `${Math.random()}.${fileExt}`;
+      const cleanName = file.name.replace(`.${fileExt}`, "").replace(/[^a-zA-Z0-9]/g, "_");
+      const fileName = `${Date.now()}_${cleanName}.${fileExt}`;
       const filePath = `${profile.user_id}/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from('songs')
-        .upload(filePath, file);
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true
+        });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error("Storage Error:", uploadError);
+        throw new Error(`Storage Upload Failed: ${uploadError.message}`);
+      }
 
+      setUploadProgress(70);
+
+      // 3. Get Public URL
       const { data: { publicUrl } } = supabase.storage
         .from('songs')
         .getPublicUrl(filePath);
 
-      // Add to DB
-      await supabase.from('songs').insert({
+      setUploadProgress(85);
+
+      // 4. Add to Database
+      const { error: dbError } = await supabase.from('songs').insert({
         uploader_id: profile.user_id,
         title: file.name.replace(`.${fileExt}`, ""),
         artist_name: profile.name || "Anonymous DJ",
         source: "upload",
         audio_url: publicUrl,
+        duration_sec: duration,
         status: "pool"
       });
 
+      if (dbError) {
+        console.error("Database Error:", dbError);
+        throw new Error(`Library Registration Failed: ${dbError.message}`);
+      }
+
+      setUploadProgress(100);
       await fetchLibrary();
-      alert("Song uploaded successfully!");
+      alert("Track successfully deployed to the pool!");
     } catch (error: any) {
-      alert("Error uploading song: " + error.message);
+      console.error("Upload Master Error:", error);
+      alert("UPLOAD ABORTED: " + error.message);
     } finally {
-      setIsUploading(false);
+      setTimeout(() => {
+        setIsUploading(false);
+        setUploadProgress(0);
+      }, 1000);
     }
   };
 
@@ -313,7 +357,19 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate, onSignOut }) => {
               <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Song Archive</span>
               <label className="cursor-pointer">
                 <input type="file" accept="audio/*" onChange={handleUpload} className="hidden" disabled={isUploading} />
-                <span className="text-[9px] font-bold text-purple-500 hover:text-purple-400 uppercase">{isUploading ? 'Uploading...' : 'Upload'}</span>
+                <div className="flex flex-col items-end">
+                  <span className={`text-[9px] font-bold uppercase transition-all ${isUploading ? 'text-zinc-500' : 'text-purple-500 hover:text-purple-400'}`}>
+                    {isUploading ? `Uploading ${uploadProgress}%` : 'Upload'}
+                  </span>
+                  {isUploading && (
+                    <div className="w-20 h-1 bg-white/5 rounded-full mt-1 overflow-hidden">
+                      <div
+                        className="h-full bg-purple-500 transition-all duration-300"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
               </label>
             </div>
             <div className="p-3">
