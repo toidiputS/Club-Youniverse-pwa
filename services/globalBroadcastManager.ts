@@ -412,17 +412,15 @@ export class GlobalBroadcastManager {
       // LEADER LOGIC: Handle song end and transition
       if (this.isLeaderLocal) {
         console.log("👑 Leader: Song ended. Transitioning...");
-        const previousSong = this.state.nowPlaying;
 
-        // 1. Clear nowPlaying in manager immediately to prevent loops
+        // 1. Get next song by completing current cycle
+        const nextSong = await PersistentRadioService.handleSongEnded(this.state.nowPlaying);
+
+        // 2. Clear current state locally to ensure clean transition
         this.state.nowPlaying = null;
         this.emit("nowPlayingChanged", null);
 
-        // 2. Let the service handle the DB side (move winner to next_play, etc.)
-        await PersistentRadioService.handleSongEnded(previousSong);
-
-        // 3. Move next_play to now_playing in DB and get the song
-        const nextSong = await PersistentRadioService.cycleNextToNow();
+        // 3. Play the winner
         if (nextSong) {
           await this.setNowPlaying(nextSong);
         }

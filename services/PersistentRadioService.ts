@@ -38,8 +38,7 @@ export class PersistentRadioService {
 
             if (elapsed > nowPlaying.durationSec + margin) {
                 console.log(`🧟 Watchdog: Zombie detected! (${elapsed.toFixed(1)}s elapsed for ${nowPlaying.durationSec}s song). Force transitioning...`);
-                await this.handleSongEnded(nowPlaying);
-                return await this.cycleNextToNow();
+                return await this.handleSongEnded(nowPlaying);
             }
         }
 
@@ -54,7 +53,7 @@ export class PersistentRadioService {
      * 4. Penalizes losers.
      * 5. Populates a new box.
      */
-    static async handleSongEnded(currentSong: Song | null) {
+    static async handleSongEnded(currentSong: Song | null): Promise<Song | null> {
         console.log("🎬 PersistentRadioService: Handling end of song...");
 
         // 1. Return current song to pool (if it exists)
@@ -132,6 +131,9 @@ export class PersistentRadioService {
 
         // 4. Populate a new box immediately
         await this.populateTheBox();
+
+        // 5. Return the winner so it can be played immediately
+        return await this.cycleNextToNow();
     }
 
     /**
@@ -169,60 +171,47 @@ export class PersistentRadioService {
         }
     }
 
-    /**
-     * Logic to transition NextPlay -> NowPlaying
-     * @returns The newly playing song if one was transitioned.
-     */
     static async cycleNextToNow(): Promise<Song | null> {
-        // 1. Check if something is 'now_playing'
-        const { data: currentNow } = await supabase
-            .from("songs")
-            .select("*")
-            .eq("status", "now_playing")
-            .limit(1);
-
-        if (currentNow && currentNow.length > 0) {
-            // Something is already playing. We return it to sync state just in case.
-            return this.mapDbToApp(currentNow[0]);
-        }
-
-        // 2. Check if something is 'next_play'
         const { data: nextUp } = await supabase
             .from("songs")
             .select("*")
             .eq("status", "next_play")
-            .limit(1)
-            .single();
+            .limit(1);
 
-        if (nextUp) {
-            console.log(`🚀 Transitioning ${nextUp.title} from next_play to now_playing`);
+        const nextUpSong = nextUp && nextUp.length > 0 ? nextUp[0] : null;
+
+        if (nextUpSong) {
+            console.log(`🚀 Transitioning ${nextUpSong.title} from next_play to now_playing`);
             await supabase
                 .from("songs")
                 .update({
                     status: "now_playing",
                     last_played_at: new Date().toISOString()
                 })
-                .eq("id", nextUp.id);
+                .eq("id", nextUpSong.id);
 
-            return this.mapDbToApp({ ...nextUp, status: 'now_playing' });
+            return this.mapDbToApp({ ...nextUpSong, status: 'now_playing' });
         } else {
-            // If no next_play, pick from pool directly (failsafe)
+            console.log("🎲 No next_play. Picking random from pool...");
+            // If no next_play, pick RANDOM from pool directly (failsafe)
+            // We fetch a larger batch and pick one randomly locally to avoid complex PG random SQL
             const { data: poolSongs } = await supabase
                 .from("songs")
                 .select("*")
                 .eq("status", "pool")
-                .limit(1);
+                .limit(20);
 
             if (poolSongs && poolSongs.length > 0) {
+                const randomSong = poolSongs[Math.floor(Math.random() * poolSongs.length)];
                 await supabase
                     .from("songs")
                     .update({
                         status: "now_playing",
                         last_played_at: new Date().toISOString()
                     })
-                    .eq("id", poolSongs[0].id);
+                    .eq("id", randomSong.id);
 
-                return this.mapDbToApp({ ...poolSongs[0], status: 'now_playing' });
+                return this.mapDbToApp({ ...randomSong, status: 'now_playing' });
             }
         }
         return null;
