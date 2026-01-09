@@ -31,16 +31,16 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, onSignOut, profile }) 
       </div>
 
       {/* Main Experience Layer (Open Center) */}
-      <div className="flex-grow relative z-30 min-h-0">
-        <div className="absolute inset-0 flex flex-col lg:flex-row pointer-events-none p-4 sm:p-8 gap-6 justify-between items-end">
+      <div className="flex-grow relative z-30 min-h-0 flex flex-col justify-end p-4 sm:p-8">
+        <div className="flex flex-col lg:flex-row pointer-events-none gap-6 justify-between items-end w-full">
 
           {/* Bottom Left: Minimized NowPlay */}
-          <div className="w-full lg:w-[320px] pointer-events-auto animate-in slide-in-from-left-10 duration-700">
+          <div className="w-full lg:w-[320px] pointer-events-auto animate-in slide-in-from-left-10 duration-700 order-2 lg:order-1">
             <NowPlay />
           </div>
 
           {/* Bottom Right: Minimized The Box */}
-          <div className="w-full lg:w-[450px] pointer-events-auto animate-in slide-in-from-right-10 duration-700">
+          <div className="w-full lg:w-[450px] pointer-events-auto animate-in slide-in-from-right-10 duration-700 order-1 lg:order-2">
             <TheBox />
           </div>
         </div>

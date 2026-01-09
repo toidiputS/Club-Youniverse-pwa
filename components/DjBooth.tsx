@@ -5,8 +5,10 @@
 import React, { useContext, useState } from "react";
 import { RadioContext } from "../contexts/AudioPlayerContext";
 import type { View } from "../types";
-import { Header } from "./Header";
 import { supabase } from "../services/supabaseClient";
+import { NowPlay } from "./NowPlay";
+import { TheBox } from "./TheBox";
+import { TheChat } from "./TheChat";
 
 interface DjBoothProps {
   onNavigate: (view: View) => void;
@@ -25,21 +27,17 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate, onSignOut }) => {
 
   // Library & Upload State
   const [songs, setSongs] = useState<any[]>([]);
-  const [isLoadingSongs, setIsLoadingSongs] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
 
   // Fetch Library
   const fetchLibrary = async () => {
-    setIsLoadingSongs(true);
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("songs")
       .select("*")
       .order("created_at", { ascending: false });
 
     if (data) setSongs(data);
-    setIsLoadingSongs(false);
   };
 
   React.useEffect(() => {
@@ -119,14 +117,14 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate, onSignOut }) => {
     if (!file || !profile.user_id) return;
 
     setIsUploading(true);
-    setUploadProgress(0);
+    setIsUploading(true);
 
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${Math.random()}.${fileExt}`;
       const filePath = `${profile.user_id}/${fileName}`;
 
-      const { error: uploadError, data } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('songs')
         .upload(filePath, file);
 
@@ -156,180 +154,198 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate, onSignOut }) => {
   };
 
   return (
-    <div className="flex flex-col min-h-full w-full gap-8 p-4 sm:p-8 max-w-7xl mx-auto animate-in slide-in-from-right-10 duration-700 overflow-y-auto">
-      <Header onNavigate={onNavigate} onSignOut={onSignOut} profile={profile} />
+    <div className="min-h-screen lg:fixed lg:inset-0 bg-[#020205] text-white flex flex-col overflow-y-auto lg:overflow-hidden select-none">
+      {/* --- TOP HUD --- */}
+      <div className="h-20 border-b border-white/5 bg-black/40 backdrop-blur-xl flex items-center justify-between px-8 z-50">
+        <div className="flex items-center gap-6">
+          <div className="flex flex-col">
+            <h1 className="text-xl font-black tracking-tighter text-white flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-red-600 animate-pulse shadow-[0_0_10px_rgba(220,38,38,0.8)]" />
+              TITAN COMMAND DECK
+            </h1>
+            <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Station: Club Youniverse // Live Feed</span>
+          </div>
+          <div className="h-8 w-px bg-white/10 hidden md:block" />
+          <div className="hidden md:flex gap-8">
+            <div className="flex flex-col">
+              <span className="text-[9px] font-bold text-zinc-600 uppercase">System Status</span>
+              <span className="text-xs font-black text-purple-400 uppercase tracking-widest">{radioState}</span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[9px] font-bold text-zinc-600 uppercase">DJ Mode</span>
+              <span className="text-xs font-black text-blue-400 uppercase tracking-widest">GOD_MODE</span>
+            </div>
+          </div>
+        </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 flex-grow">
-        {/* Left Column: Radio State Control */}
-        <div className="lg:col-span-8 flex flex-col gap-6">
-          <div className="bg-zinc-900/80 backdrop-blur-2xl rounded-[2.5rem] border border-white/10 p-8 shadow-2xl">
-            <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-3">
-              <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
-              Live Control Deck
-            </h3>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => onNavigate("club")}
+            className="px-6 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95"
+          >
+            Exit to Floor
+          </button>
+          <div className="flex items-center gap-3 pl-4 border-l border-white/10">
+            <div className="text-right hidden sm:block">
+              <div className="text-[10px] font-black text-white">{profile.name}</div>
+              <button onClick={onSignOut} className="text-[9px] font-bold text-red-500/80 hover:text-red-500 uppercase tracking-tighter">Sign Out</button>
+            </div>
+            <img src={profile.avatar_url || "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix"} className="w-10 h-10 rounded-xl border border-white/10" alt="DJ" />
+          </div>
+        </div>
+      </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-              <button
-                onClick={() => forceNextState("THE_BOX")}
-                className="flex flex-col items-center gap-3 p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl transition-all hover:scale-105 active:scale-95"
-              >
-                <div className="text-2xl">📦</div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Force Box</span>
-              </button>
-              <button
-                onClick={() => forceNextState("BOX_WIN")}
-                className="flex flex-col items-center gap-3 p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl transition-all hover:scale-105 active:scale-95"
-              >
-                <div className="text-2xl">🏆</div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Force Winner</span>
-              </button>
-              <button
-                onClick={() => forceNextState("POOL")}
-                className="flex flex-col items-center gap-3 p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl transition-all hover:scale-105 active:scale-95"
-              >
-                <div className="text-2xl">🔄</div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Back to Pool</span>
-              </button>
-              <button
-                onClick={() => forceNextState("DJ_TALKING")}
-                className="flex flex-col items-center gap-3 p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl transition-all hover:scale-105 active:scale-95"
-              >
-                <div className="text-2xl">🎙️</div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">DJ Talking</span>
-              </button>
+      {/* --- MAIN DECK --- */}
+      <div className="flex-grow flex flex-col lg:flex-row min-h-0 relative">
+
+        {/* LEFT BAR: SYSTEM WEAPONS */}
+        <div className="w-full lg:w-20 border-b lg:border-r lg:border-b-0 border-white/5 bg-black/20 flex flex-row lg:flex-col items-center justify-center lg:py-8 gap-4 lg:gap-6 z-40 p-4">
+          {[
+            { id: 'THE_BOX', icon: '📦', label: 'Box' },
+            { id: 'BOX_WIN', icon: '🏆', label: 'Win' },
+            { id: 'POOL', icon: '🔄', label: 'Pool' },
+            { id: 'DJ_TALKING', icon: '🎙️', label: 'Mic' },
+            { id: 'REBOOT', icon: '☢️', label: 'Nuke', color: 'text-red-500' }
+          ].map(btn => (
+            <button
+              key={btn.id}
+              onClick={() => forceNextState(btn.id)}
+              className={`group relative flex flex-col lg:flex-col items-center justify-center p-3 rounded-2xl border border-white/5 hover:border-purple-500/50 hover:bg-purple-500/10 transition-all ${btn.color || 'text-white'} flex-shrink-0 min-w-[60px]`}
+            >
+              <div className="text-xl group-hover:scale-110 transition-transform">{btn.icon}</div>
+              <span className="text-[8px] font-black uppercase mt-1 opacity-40 group-hover:opacity-100">{btn.label}</span>
+              {radioState === btn.id && (
+                <div className="absolute -bottom-1 lg:-right-1 lg:top-1/2 lg:-translate-y-1/2 w-8 lg:w-1 h-1 lg:h-8 bg-purple-500 rounded-full shadow-[0_0_10px_purple]" />
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* CENTER: THE MONITOR (LIVE FLOOR) */}
+        <div className="flex-grow flex flex-col p-6 gap-6 overflow-hidden">
+          {/* THE FLOOR PREVIEW */}
+          <div className="flex-grow relative bg-zinc-950 rounded-[3rem] border border-white/5 overflow-hidden shadow-[inset_0_0_100px_rgba(0,0,0,0.8)] flex flex-col">
+            <div className="absolute top-8 left-10 z-20">
+              <span className="flex items-center gap-2 text-[10px] font-black text-white/40 uppercase tracking-[0.4em]">
+                <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_5px_green]" />
+                Live Floor Feed
+              </span>
             </div>
 
-            <div className="space-y-6">
-              <div className="p-6 bg-black/40 rounded-3xl border border-white/5">
-                <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-[0.2em] mb-4">Site-Wide Visual FX</h4>
-                <div className="flex flex-wrap gap-3">
-                  {["Confetti", "Glitch", "Shake", "Neon Pulse", "Static"].map((fx) => (
-                    <button
-                      key={fx}
-                      onClick={() => sendSiteCommand("trigger_fx", { fx })}
-                      className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-[10px] font-bold uppercase tracking-widest rounded-full transition-colors border border-white/5"
-                    >
-                      {fx}
-                    </button>
-                  ))}
-                </div>
+            <div className="flex-grow flex flex-col xl:flex-row items-center justify-around px-4 lg:px-12 pointer-events-none scale-90 lg:scale-100 gap-8">
+              {/* Transformed components to look like monitors */}
+              <div className="w-full lg:w-[320px] pointer-events-auto">
+                <NowPlay />
               </div>
+              <div className="w-full lg:w-[450px] pointer-events-auto">
+                <TheBox />
+              </div>
+            </div>
 
-              <div className="p-6 bg-black/40 rounded-3xl border border-white/5">
-                <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-[0.2em] mb-4">Breaking News Ticker</h4>
-                <form onSubmit={handleTickerUpdate} className="flex gap-4">
+            {/* QUICK FX BAR */}
+            <div className="min-h-20 bg-black/60 border-t border-white/5 backdrop-blur-md flex flex-wrap items-center px-4 lg:px-10 gap-2 lg:gap-4 py-4 lg:py-0">
+              <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mr-4 w-full lg:w-auto mb-2 lg:mb-0">Trigger FX:</span>
+              {["Confetti", "Glitch", "Shake", "Neon Pulse", "Static"].map((fx) => (
+                <button
+                  key={fx}
+                  onClick={() => sendSiteCommand("trigger_fx", { fx })}
+                  className="px-4 py-1.5 bg-white/5 hover:bg-white/10 border border-white/5 text-white/60 hover:text-white text-[9px] font-black uppercase tracking-widest rounded-full transition-all hover:-translate-y-0.5"
+                >
+                  {fx}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* THE TRANSMITTER (TTS) */}
+          <div className="h-48 bg-zinc-900/40 border border-white/5 rounded-[2.5rem] p-6 flex flex-col gap-4 relative overflow-hidden group">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-purple-500/40 to-transparent" />
+            <div className="flex items-center justify-between mb-1">
+              <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">AI Narrator Transmitter</h4>
+              <div className="flex gap-4">
+                <form onSubmit={handleTickerUpdate} className="flex gap-2">
                   <input
                     type="text"
                     value={tickerInput}
                     onChange={(e) => setTickerInput(e.target.value)}
-                    className="flex-grow bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-purple-500/50"
+                    className="bg-black/40 border border-white/10 rounded-lg px-3 py-1 text-[10px] text-white w-48 focus:outline-none focus:border-purple-500/50"
                   />
-                  <button
-                    type="submit"
-                    disabled={isUpdatingTicker}
-                    className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white text-[10px] font-black uppercase rounded-xl transition-all disabled:opacity-50"
-                  >
-                    {isUpdatingTicker ? "Updating..." : "Update"}
-                  </button>
+                  <button type="submit" disabled={isUpdatingTicker} className="text-[9px] font-black text-purple-400 uppercase hover:text-purple-300">Update News</button>
                 </form>
               </div>
             </div>
-          </div>
 
-          <div className="bg-zinc-900/80 backdrop-blur-2xl rounded-[2.5rem] border border-white/10 p-8 shadow-2xl">
-            <h3 className="text-xl font-black text-white mb-6">TTS AI Voice (Station Output)</h3>
-            <form onSubmit={handleTtsSend} className="space-y-4">
+            <form onSubmit={handleTtsSend} className="flex gap-4 flex-grow">
               <textarea
                 value={ttsInput}
                 onChange={(e) => setTtsInput(e.target.value)}
-                placeholder="Type something for the DJ to say..."
-                className="w-full h-32 bg-black/40 border border-white/10 rounded-3xl p-6 text-white placeholder-zinc-600 focus:outline-none focus:border-purple-500/50 focus:ring-4 focus:ring-purple-500/10 transition-all resize-none"
+                placeholder="Type the next broadcast command..."
+                className="flex-grow bg-black/60 border border-white/5 rounded-2xl p-4 text-sm text-white placeholder-zinc-700 focus:outline-none focus:ring-2 focus:ring-purple-500/20 transition-all resize-none font-mono"
               />
-              <div className="flex items-center justify-between">
-                <select className="bg-zinc-800 text-white text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full border border-white/5 focus:outline-none">
-                  <option>Fenrir (Deep/Rough)</option>
-                  <option>Kore (Sleek/Modern)</option>
-                  <option>Charon (Dark/Monotone)</option>
+              <div className="flex flex-col gap-2 w-48">
+                <select className="bg-zinc-800 text-[9px] font-black uppercase tracking-widest px-4 py-2.5 rounded-xl border border-white/5 focus:outline-none appearance-none cursor-pointer">
+                  <option>Fenrir (Deep)</option>
+                  <option>Kore (Sleek)</option>
+                  <option>Charon (Dark)</option>
                 </select>
                 <button
                   type="submit"
                   disabled={isSending || !ttsInput.trim()}
-                  className="px-12 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white text-sm font-black uppercase tracking-widest rounded-2xl transition-all shadow-xl shadow-purple-900/20 disabled:opacity-50"
+                  className="flex-grow bg-gradient-to-br from-purple-600 to-indigo-700 hover:from-purple-500 hover:to-indigo-600 text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-xl transition-all shadow-[0_4px_20px_rgba(147,51,234,0.3)] disabled:opacity-50"
                 >
-                  {isSending ? "Synthesizing..." : "Transmit Audio"}
+                  {isSending ? "ENCRYPTING..." : "TRANSMIT"}
                 </button>
               </div>
             </form>
           </div>
         </div>
 
-        {/* Right Column: Site Status & Info */}
-        <div className="lg:col-span-4 flex flex-col gap-6">
-          <div className="bg-zinc-900/80 backdrop-blur-2xl rounded-[2.5rem] border border-white/10 p-8 flex flex-col gap-4 shadow-2xl">
-            <h3 className="text-sm font-black text-white uppercase tracking-widest border-b border-white/5 pb-4">Station Status</h3>
-            <div className="flex flex-col gap-6">
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Active State</span>
-                <span className="px-3 py-1 bg-purple-500/20 text-purple-400 text-[10px] font-black uppercase rounded-full border border-purple-500/20">{radioState}</span>
-              </div>
-            </div>
+        {/* RIGHT SIDE: THE PULSE & ARCHIVE */}
+        <div className="w-full lg:w-[400px] border-t lg:border-t-0 lg:border-l border-white/5 bg-black/40 flex flex-col p-6 gap-6">
+          {/* LIVE CHAT INTEGRATION */}
+          <div className="flex-grow min-h-0 flex flex-col">
+            <TheChat profile={profile} />
           </div>
 
-          <div className="bg-zinc-900/80 backdrop-blur-2xl rounded-[2.5rem] border border-white/10 p-8 shadow-2xl flex flex-col gap-6 flex-grow overflow-hidden">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-black text-white uppercase tracking-widest">Song Library</h3>
-              <label className="cursor-pointer group">
+          {/* MINI ARCHIVE (SONG LIBRARY) */}
+          <div className="h-[35%] bg-black/60 rounded-[2rem] border border-white/5 flex flex-col overflow-hidden">
+            <div className="p-4 border-b border-white/5 flex items-center justify-between">
+              <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Song Archive</span>
+              <label className="cursor-pointer">
                 <input type="file" accept="audio/*" onChange={handleUpload} className="hidden" disabled={isUploading} />
-                <div className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${isUploading ? 'bg-zinc-800 text-zinc-500' : 'bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-900/20'}`}>
-                  {isUploading ? "Uploading..." : "Upload MP3"}
-                </div>
+                <span className="text-[9px] font-bold text-purple-500 hover:text-purple-400 uppercase">{isUploading ? 'Uploading...' : 'Upload'}</span>
               </label>
             </div>
-
-            <div className="relative">
+            <div className="p-3">
               <input
                 type="text"
-                placeholder="Search library..."
+                placeholder="Filter Archive..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-purple-500/50"
+                className="w-full bg-white/5 border border-white/5 rounded-lg px-3 py-1.5 text-[10px] text-white focus:outline-none focus:border-purple-500/50"
               />
             </div>
-
-            <div className="flex-grow overflow-y-auto space-y-3 pr-2">
-              {isLoadingSongs ? (
-                <div className="text-center py-8 text-zinc-600 text-[10px] font-bold uppercase tracking-widest animate-pulse">Scanning Archive...</div>
-              ) : filteredSongs.map((song) => (
-                <div key={song.id} className="group flex items-center justify-between p-3 bg-white/5 rounded-2xl border border-white/5 hover:border-white/10 transition-all">
+            <div className="flex-grow overflow-y-auto px-1 scrollbar-hide">
+              {filteredSongs.map((song) => (
+                <div key={song.id} className="group flex items-center justify-between p-3 hover:bg-white/5 border-b border-white/5 transition-all">
                   <div className="min-w-0 flex-grow">
-                    <h4 className="text-[11px] font-black text-white truncate">{song.title}</h4>
-                    <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-tighter truncate">{song.artist_name}</p>
+                    <h4 className="text-[10px] font-bold text-white truncate">{song.title}</h4>
+                    <p className="text-[8px] font-medium text-zinc-600 uppercase truncate">{song.artist_name}</p>
                   </div>
                   <button
                     onClick={() => downloadSong(song.audio_url, song.title)}
-                    className="ml-4 p-2 bg-white/5 hover:bg-white/10 rounded-lg text-white/40 hover:text-white transition-all opacity-0 group-hover:opacity-100"
-                    title="Download MP3"
+                    className="ml-2 p-1.5 opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-white transition-all"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="避M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                     </svg>
                   </button>
                 </div>
               ))}
             </div>
           </div>
-
-          <div className="bg-gradient-to-br from-indigo-900/40 to-black rounded-[2.5rem] border border-white/10 p-8 shadow-2xl flex flex-col gap-4 overflow-hidden relative">
-            <h3 className="text-sm font-black text-white uppercase tracking-widest">System Reboot</h3>
-            <p className="text-xs text-zinc-500 leading-relaxed font-medium">Use for critical site shapeshifting. VSCode + Git + Vercel deployment flow should be ready before triggering.</p>
-            <button
-              onClick={() => forceNextState("REBOOT")}
-              className="mt-4 w-full py-4 bg-red-500/10 hover:bg-red-500/20 text-red-500 text-xs font-black uppercase tracking-widest rounded-2xl border border-red-500/20 transition-all"
-            >
-              Trigger Emergency Reboot
-            </button>
-          </div>
         </div>
+
       </div>
     </div>
   );
