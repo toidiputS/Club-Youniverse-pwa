@@ -364,34 +364,34 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
         <FloorView onNavigate={() => { }} onSignOut={() => { }} profile={profile} />
       </div>
 
-      {/* 2. TOP TECHNICAL HUD (Minimized) */}
-      <div className="relative z-50 h-14 border-b border-white/5 bg-zinc-950/60 backdrop-blur-xl flex items-center justify-between px-6">
-        <div className="flex items-center gap-10">
-          <div className="flex flex-col">
+      {/* 2. TOP TECHNICAL HUD */}
+      <div className="relative z-50 md:h-14 py-2 md:py-0 border-b border-white/5 bg-zinc-950/60 backdrop-blur-xl flex flex-col md:flex-row items-center justify-between px-4 md:px-6 gap-4 md:gap-0">
+        <div className="flex flex-col md:flex-row items-center gap-4 md:gap-10 w-full md:w-auto">
+          <div className="flex flex-col items-center md:items-start text-center md:text-left">
             <h1 className="text-xs font-black tracking-[0.4em] uppercase text-white">Titan Deck v4</h1>
             <span className="text-[7px] font-bold text-zinc-600 uppercase tracking-[0.2em] mt-0.5">Authorized Node: {profile.user_id?.slice(0, 8)}</span>
           </div>
 
-          <div className="flex gap-6 items-center border-l border-white/5 pl-6">
-            <div className="flex gap-2 items-baseline">
+          <div className="flex flex-wrap justify-center md:justify-start gap-4 md:gap-6 items-center border-t md:border-t-0 md:border-l border-white/5 pt-2 md:pt-0 md:pl-6 w-full md:w-auto">
+            <div className="flex gap-1 md:gap-2 items-baseline">
               <span className="text-[8px] font-black uppercase text-zinc-500">Status:</span>
               <span className="text-[10px] font-black uppercase text-purple-400 tracking-widest">{radioState}</span>
             </div>
-            <div className="flex gap-2 items-baseline border-l border-white/5 pl-6">
-              <span className="text-[8px] font-black uppercase text-zinc-500">DB Songs:</span>
+            <div className="flex gap-1 md:gap-2 items-baseline border-l border-white/5 pl-4 md:pl-6">
+              <span className="text-[8px] font-black uppercase text-zinc-500">DB:</span>
               <span className="text-[10px] font-black uppercase text-green-400">{songs.length}</span>
             </div>
-            <div className="flex gap-2 items-baseline border-l border-white/5 pl-6">
-              <span className="text-[8px] font-black uppercase text-zinc-500">In Box:</span>
+            <div className="flex gap-1 md:gap-2 items-baseline border-l border-white/5 pl-4 md:pl-6">
+              <span className="text-[8px] font-black uppercase text-zinc-500">Box:</span>
               <span className="text-[10px] font-black uppercase text-purple-400">{boxCount}</span>
             </div>
-            <div className="flex gap-2 items-baseline border-l border-white/5 pl-6">
+            <div className="flex gap-1 md:gap-2 items-baseline border-l border-white/5 pl-4 md:pl-6">
               <span className="text-[8px] font-black uppercase text-zinc-500">Role:</span>
               <span className="text-[10px] font-black uppercase text-blue-400">{profile.is_admin ? "ADMIN" : "DJ"}</span>
             </div>
             <button
               onClick={fetchLibrary}
-              className="ml-4 p-1 hover:bg-white/10 rounded-md transition-colors"
+              className="p-1 hover:bg-white/10 rounded-md transition-colors"
               title="Force List Refresh"
             >
               <svg className="w-3 h-3 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -401,22 +401,22 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap justify-center items-center gap-2 md:gap-4 w-full md:w-auto">
           {isAdmin && (
             <>
               {isCurrentDJ ? (
                 <button
                   onClick={context.releaseLeadership}
-                  className="px-6 py-2 bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500 hover:text-white transition-all text-[9px] font-black uppercase tracking-[0.2em] rounded-full"
+                  className="flex-1 md:flex-none px-4 md:px-6 py-2 bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500 hover:text-white transition-all text-[9px] font-black uppercase tracking-[0.2em] rounded-full text-center"
                 >
-                  Release the Deck
+                  Release Deck
                 </button>
               ) : (
                 <button
                   onClick={context.claimLeadership}
-                  className="px-6 py-2 bg-purple-600 text-white hover:bg-purple-500 transition-all text-[9px] font-black uppercase tracking-[0.2em] rounded-full animate-pulse shadow-[0_0_20px_rgba(168,85,247,0.3)]"
+                  className="flex-1 md:flex-none px-4 md:px-6 py-2 bg-purple-600 text-white hover:bg-purple-500 transition-all text-[9px] font-black uppercase tracking-[0.2em] rounded-full animate-pulse shadow-[0_0_20px_rgba(168,85,247,0.3)] text-center"
                 >
-                  Take the Deck
+                  Take Deck
                 </button>
               )}
             </>
@@ -425,15 +425,15 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
           {isAdmin && (
             <button
               onClick={hardResetRadio}
-              className="px-4 py-2 bg-red-900/20 border border-red-500/20 text-red-500 hover:bg-red-600 hover:text-white transition-all text-[8px] font-black uppercase tracking-[0.2em] rounded-full"
+              className="px-3 md:px-4 py-2 bg-red-900/20 border border-red-500/20 text-red-500 hover:bg-red-600 hover:text-white transition-all text-[8px] font-black uppercase tracking-[0.2em] rounded-full"
             >
-              Hard Reset Radio
+              Reset Radio
             </button>
           )}
 
           <button
             onClick={() => onNavigate("club")}
-            className="px-6 py-2 bg-white/5 border border-white/10 text-white/50 hover:bg-white/10 hover:text-white transition-all text-[9px] font-black uppercase tracking-[0.2em] rounded-full"
+            className="flex-1 md:flex-none px-4 md:px-6 py-2 bg-white/5 border border-white/10 text-white/50 hover:bg-white/10 hover:text-white transition-all text-[9px] font-black uppercase tracking-[0.2em] rounded-full text-center"
           >
             Collapse
           </button>
@@ -441,10 +441,10 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
       </div>
 
       {/* 3. CORE INTERFACE (Dense overlay) */}
-      <div className="relative z-10 flex-grow flex min-h-0 overflow-hidden">
+      <div className="relative z-10 flex-grow flex flex-col md:flex-row min-h-0 overflow-y-auto md:overflow-hidden">
 
         {/* LEFT DECK: PROTOCOL TRIGGERS */}
-        <div className="w-64 border-r border-white/5 bg-zinc-950/40 backdrop-blur-md flex flex-col p-4">
+        <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-white/5 bg-zinc-950/40 backdrop-blur-md flex flex-col p-4 flex-shrink-0">
           <span className="text-[8px] font-black text-zinc-700 uppercase tracking-[0.5em] mb-4 block">System Triggers</span>
           <div className="grid grid-cols-1 gap-px bg-white/5 border border-white/5 rounded-lg overflow-hidden">
             {[
@@ -471,7 +471,7 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
           </div>
 
           {/* SQUAD / YOUSER DJ REVIEW BOX */}
-          <div className="flex-grow my-4 border border-yellow-500/30 bg-yellow-500/5 rounded-lg p-3 overflow-y-auto flex flex-col min-h-[150px]">
+          <div className="flex-grow my-4 border border-yellow-500/30 bg-yellow-500/5 rounded-lg p-3 flex flex-col min-h-[150px] md:min-h-0 md:max-h-[300px]">
             <span className="text-[8px] font-bold text-yellow-500 uppercase block mb-2 tracking-widest leading-tight">Youser Intake</span>
             <div className="flex-grow divide-y divide-white/5 overflow-y-auto pr-1 flex flex-col gap-2">
               {songs.filter(s => s.status === 'review').map(song => (
@@ -537,8 +537,8 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
             </div>
 
             {/* LIVE MONITOR: Current Broadcast Status */}
-            <div className="px-6 py-6 bg-purple-950/10 border-b border-white/5 flex items-center gap-6 relative overflow-hidden group">
-              <div className="absolute top-0 right-0 p-2 opacity-20">
+            <div className="px-6 py-6 bg-purple-950/10 border-b border-white/5 flex flex-col md:flex-row items-start md:items-center gap-6 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-2 opacity-20 hidden md:block">
                 <div className="flex gap-1">
                   {[...Array(8)].map((_, i) => (
                     <div key={i} className="w-1 h-4 bg-purple-500 animate-pulse" style={{ animationDelay: `${i * 0.1}s` }} />
@@ -602,7 +602,7 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {songs.filter(s => s.status === 'in_box').sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0)).map((song, i) => {
                   const totalVotes = songs.filter(s => s.status === 'in_box').reduce((acc, curr) => acc + (curr.upvotes || 0), 0) || 1;
                   const percentage = Math.round(((song.upvotes || 0) / totalVotes) * 100);
@@ -639,7 +639,7 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
               </div>
             </div>
 
-            <div className="flex-grow overflow-y-auto px-4 py-2 divide-y divide-white/[0.02]">
+            <div className="flex-grow overflow-y-auto px-4 py-2 divide-y divide-white/[0.02] min-h-[200px]">
               {filteredSongs.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center opacity-20 py-20">
                   <div className="w-12 h-12 border-2 border-dashed border-white/20 rounded-full animate-spin mb-4" />
@@ -705,8 +705,8 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
           </div>
 
           {/* TRANSMITTER PAD (High Density) */}
-          <div className="h-44 bg-zinc-950/80 border border-white/10 rounded-2xl p-4 flex gap-4">
-            <div className="w-48 bg-black/40 rounded-xl border border-white/5 p-3 flex flex-col justify-between">
+          <div className="md:h-44 bg-zinc-950/80 border border-white/10 rounded-2xl p-4 flex flex-col md:flex-row gap-4 mb-4 md:mb-0">
+            <div className="w-full md:w-48 bg-black/40 rounded-xl border border-white/5 p-3 flex flex-col justify-between hidden md:flex">
               <div className="flex justify-between items-center mb-1">
                 <span className="text-[7px] font-black text-zinc-700 uppercase">Return Feed</span>
                 <div className="flex items-center gap-1">
@@ -729,18 +729,18 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
                 value={ttsInput}
                 onChange={e => setTtsInput(e.target.value)}
                 placeholder="Type protocol command..."
-                className="flex-grow bg-black/40 border border-white/5 rounded-xl p-3 text-[11px] text-white/80 placeholder-zinc-800 focus:outline-none focus:border-purple-500/20 transition-all font-mono resize-none"
+                className="flex-grow min-h-[60px] md:min-h-0 bg-black/40 border border-white/5 rounded-xl p-3 text-[11px] text-white/80 placeholder-zinc-800 focus:outline-none focus:border-purple-500/20 transition-all font-mono resize-none"
               />
             </div>
-            <div className="w-48 flex flex-col gap-2">
-              <div className="p-2 border border-white/5 rounded-lg bg-black/40">
+            <div className="w-full md:w-48 flex flex-col gap-2">
+              <div className="p-2 border border-white/5 rounded-lg bg-black/40 hidden md:block">
                 <span className="text-[7px] font-black text-zinc-700 uppercase block mb-1">Vocoder Model</span>
                 <span className="text-[9px] font-black uppercase text-purple-400">Fenrir.v4</span>
               </div>
               <button
                 onClick={handleTtsSend}
                 disabled={isSending || !ttsInput.trim()}
-                className="flex-grow bg-white text-black text-[10px] font-black uppercase tracking-widest hover:invert transition-all flex items-center justify-center rounded-xl"
+                className="w-full py-3 md:py-0 md:flex-grow bg-white text-black text-[10px] font-black uppercase tracking-widest hover:invert transition-all flex items-center justify-center rounded-xl"
               >
                 {isSending ? 'Sending...' : 'Transmit Payload'}
               </button>
@@ -749,19 +749,19 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
         </div>
 
         {/* RIGHT DECK: ARCHIVE & PULSE SIDEBAR */}
-        <div className="w-80 border-l border-white/5 bg-zinc-950/40 backdrop-blur-md flex flex-col overflow-hidden">
+        <div className="w-full md:w-80 border-t md:border-t-0 md:border-l border-white/5 bg-zinc-950/40 backdrop-blur-md flex flex-col shrink-0 md:overflow-hidden h-[500px] md:h-auto">
           <div className="flex-grow min-h-0">
             <TheChat profile={profile} />
           </div>
 
           {/* PULSE MONITOR / FX PAD moved here */}
-          <div className="h-64 border-t border-white/5 bg-black/40 p-4">
+          <div className="md:h-64 border-t border-white/5 bg-black/40 p-4 shrink-0">
             <span className="text-[8px] font-black text-zinc-700 uppercase tracking-[0.4em] mb-4 block">Pulse Monitor</span>
             <div className="flex-grow flex items-center justify-center relative border border-white/5 rounded-xl bg-zinc-950/20 overflow-hidden mb-4 h-24">
               <div className="absolute inset-0 grid grid-cols-6 grid-rows-6 opacity-[0.03] pointer-events-none">
                 {Array.from({ length: 36 }).map((_, i) => <div key={i} className="border border-white" />)}
               </div>
-              <div className="z-10 grid grid-cols-5 gap-1 w-full px-2">
+              <div className="z-10 grid grid-cols-5 md:grid-cols-5 gap-1 md:gap-2 w-full px-2">
                 {["Confetti", "Glitch", "Shake", "Pulse", "Static", "Invert", "Hue", "Blur", "Pixel", "Neon"].map(fx => (
                   <button
                     key={fx}

@@ -117,15 +117,19 @@ const App: React.FC = () => {
         <AudioVisualizer />
         <SiteEffects />
         <TuneInOverlay />
-        <div className="h-screen relative z-10 flex flex-col overflow-hidden text-white">
-          <main className="flex-grow flex flex-col relative min-h-0">
+        <div className="h-[100dvh] relative z-10 flex flex-col overflow-y-auto overflow-x-hidden text-white w-full">
+          <main className="flex-grow flex flex-col relative w-full">
             {currentView === "club" ? (
-              <Club onNavigate={setCurrentView} onSignOut={handleSignOut} profile={profile} />
+              <div className="h-full w-full overflow-hidden absolute inset-0">
+                <Club onNavigate={setCurrentView} onSignOut={handleSignOut} profile={profile} />
+              </div>
             ) : (
               <DjBooth onNavigate={setCurrentView} />
             )}
           </main>
-          <Ticker />
+          <div className="sticky bottom-0 z-50 w-full mt-auto">
+            <Ticker />
+          </div>
         </div>
       </RadioProvider>
     </ThemeProvider>
