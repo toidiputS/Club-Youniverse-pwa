@@ -3,41 +3,20 @@
  * Registers the PWA service worker and handles updates
  */
 
-export const registerServiceWorker = async () => {
+import { registerSW } from "virtual:pwa-register";
+
+export const registerServiceWorker = () => {
   if ("serviceWorker" in navigator) {
-    try {
-      const registration = await navigator.serviceWorker.register("/sw.js", {
-        scope: "/",
-      });
-
-      console.log(
-        "✅ Service Worker registered successfully:",
-        registration.scope,
-      );
-
-      // Handle updates
-      registration.addEventListener("updatefound", () => {
-        const newWorker = registration.installing;
-        if (newWorker) {
-          newWorker.addEventListener("statechange", () => {
-            if (
-              newWorker.state === "installed" &&
-              navigator.serviceWorker.controller
-            ) {
-              console.log("🆕 New content available! Refresh to update.");
-              // You can show a UI prompt here to ask users to refresh
-              if (confirm("New version available! Refresh to update?")) {
-                window.location.reload();
-              }
-            }
-          });
+    const updateSW = registerSW({
+      onNeedRefresh() {
+        if (confirm("New version available! Refresh to update?")) {
+          updateSW(true);
         }
-      });
-
-      return registration;
-    } catch (error) {
-      console.error("❌ Service Worker registration failed:", error);
-    }
+      },
+      onOfflineReady() {
+        console.log("Ready to work offline!");
+      },
+    });
   } else {
     console.warn("⚠️ Service Workers not supported in this browser");
   }

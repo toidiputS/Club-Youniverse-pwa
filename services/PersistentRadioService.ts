@@ -8,11 +8,15 @@ import type { Song, ChatMessage } from "../types";
 import { LocalAiService } from "./LocalAiService";
 
 export class PersistentRadioService {
+    private static lastCheck: number = 0;
+
     /**
      * Watchdog: Ensures the radio is healthy.
-     * Called periodically by the Leader.
      */
     static async checkRadioHealth(nowPlaying: Song | null): Promise<Song | null> {
+        const now = Date.now();
+        if (now - this.lastCheck < 10000) return null; // Throttle to 10s
+        this.lastCheck = now;
         // 1. Ensure Box is populated
         await this.populateTheBox();
 
@@ -114,13 +118,11 @@ export class PersistentRadioService {
 
             // Process Losers
             for (const loser of losers) {
-                console.log(`💀 Loser: ${loser.title} (-1 star)`);
-                const newStars = (loser.stars || 5) - 1;
+                console.log(`💀 Loser: ${loser.title} returning to pool.`);
                 await supabase
                     .from("songs")
                     .update({
-                        stars: Math.max(0, newStars),
-                        status: newStars <= 0 ? "graveyard" : "pool",
+                        status: "pool",
                         upvotes: 0
                     })
                     .eq("id", loser.id);
@@ -137,6 +139,47 @@ export class PersistentRadioService {
     }
 
     /**
+     * Clears current in_box songs and populates fresh ones.
+     */
+    static async forceRefreshBox() {
+        console.log("♻️ PersistentRadioService: Force refreshing box...");
+        // 1. Return current box songs to pool
+        await supabase
+            .from("songs")
+            .update({ status: "pool", upvotes: 0 })
+            .eq("status", "in_box");
+
+        // 2. Populate fresh
+        await this.populateTheBox();
+    }
+
+    /**
+     * Resets the entire station to a clean pool state.
+     */
+    static async hardReset() {
+        console.log("☢️ PersistentRadioService: HARD RESET triggered.");
+        // 1. Move everything to pool
+        await supabase
+            .from("songs")
+            .update({ status: "pool", upvotes: 0 })
+            .in("status", ["now_playing", "next_play", "in_box", "review"]);
+
+        // 2. Clear broadcast metadata
+        await supabase
+            .from("broadcasts")
+            .update({
+                current_song_id: null,
+                next_song_id: null,
+                radio_state: "POOL",
+                song_started_at: null
+            })
+            .eq("id", "00000000-0000-0000-0000-000000000000");
+
+        // 3. Populate fresh box to start cycle
+        await this.populateTheBox();
+    }
+
+    /**
      * Ensures the 'in_box' status has exactly 2 songs.
      */
     static async populateTheBox() {
@@ -148,17 +191,35 @@ export class PersistentRadioService {
         const needed = 2 - (count || 0);
         if (needed <= 0) return;
 
-        console.log(`🛠️ Populating The Box: Picking ${needed} songs from pool...`);
+        console.log(`🛠️ Populating The Box: Picking ${needed} songs...`);
 
-        // Pick random songs from pool (weighted by stars maybe later, for now just random)
-        const { data: poolSongs } = await supabase
+        // 1. Try to pick from 'pool' or 'review' first (Priority)
+        let { data: candidates } = await supabase
             .from("songs")
             .select("*")
-            .eq("status", "pool")
+            .in("status", ["pool", "review"])
+            .order('last_played_at', { ascending: true })
             .limit(needed);
 
-        if (poolSongs) {
-            for (const song of poolSongs) {
+        // 2. AGGRESSIVE FALLBACK: If we still need more, grab ANY song that isn't currently active
+        const currentCount = candidates?.length || 0;
+        if (currentCount < needed) {
+            const stillNeeded = needed - currentCount;
+            const { data: fallbackSongs } = await supabase
+                .from("songs")
+                .select("*")
+                .not("status", "in", `("now_playing","next_play","in_box")`)
+                .order('last_played_at', { ascending: true })
+                .limit(stillNeeded);
+
+            if (fallbackSongs) {
+                candidates = [...(candidates || []), ...fallbackSongs];
+            }
+        }
+
+        if (candidates && candidates.length > 0) {
+            for (const song of candidates) {
+                console.log(`📦 Adding ${song.title} to The Box.`);
                 await supabase
                     .from("songs")
                     .update({

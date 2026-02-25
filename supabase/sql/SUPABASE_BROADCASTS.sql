@@ -21,7 +21,7 @@ USING (true);
 -- In a real prod env, this might be restricted to specific DJ roles.
 CREATE POLICY "Authenticated users can update broadcast"
 ON public.broadcasts FOR ALL
-USING (auth.role() = 'authenticated');
+USING ((select auth.role()) = 'authenticated');
 
 -- Enable Realtime for this table
 ALTER PUBLICATION supabase_realtime ADD TABLE public.broadcasts;

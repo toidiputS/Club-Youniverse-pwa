@@ -91,7 +91,9 @@ export type RadioState =
   | "BOX_WIN"
   | "NEXT_PLAY"
   | "NOW_PLAYING"
-  | "DJ_TALKING";
+  | "DJ_TALKING"
+  | "REBOOT"
+  | "IDLE";
 
 // --- UI & Settings ---
 export type ThemeName = "dark" | "light" | "gradient1" | "gradient2";

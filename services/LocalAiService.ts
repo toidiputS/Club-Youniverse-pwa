@@ -18,9 +18,13 @@ export class LocalAiService {
         Be cool, mysterious, and hype up the winner.`;
 
         try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
+
             const response = await fetch(LM_STUDIO_URL, {
                 method: "POST",
                 mode: "cors", // Explicitly enable CORS mode
+                signal: controller.signal,
                 headers: {
                     "Content-Type": "application/json",
                     "Authorization": "Bearer no-key" // Some servers expect this header even if not used
@@ -37,6 +41,7 @@ export class LocalAiService {
             });
 
             const data = await response.json();
+            clearTimeout(timeoutId);
             return data.choices?.[0]?.message?.content || `The crowd has spoken! Up next: ${winner.title}.`;
         } catch (e) {
             console.warn("🤖 Local AI unavailable, falling back to basic banter.", e);

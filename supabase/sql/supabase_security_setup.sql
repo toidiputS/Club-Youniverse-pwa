@@ -52,14 +52,14 @@ BEGIN
         IF EXISTS (SELECT FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'playback_state' AND column_name = 'user_id') THEN
             CREATE POLICY "Users can manage their own playback_state"
             ON public.playback_state FOR ALL TO authenticated
-            USING (auth.uid() = user_id)
-            WITH CHECK (auth.uid() = user_id);
+            USING ((SELECT auth.uid()) = user_id)
+            WITH CHECK ((SELECT auth.uid()) = user_id);
         ELSIF EXISTS (SELECT FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'playback_state' AND column_name = 'id') THEN
             -- Some schemas use 'id' as the user identifier in state tables
             CREATE POLICY "Users can manage their own playback_state"
             ON public.playback_state FOR ALL TO authenticated
-            USING (auth.uid() = id)
-            WITH CHECK (auth.uid() = id);
+            USING ((SELECT auth.uid()) = id)
+            WITH CHECK ((SELECT auth.uid()) = id);
         ELSE
             -- Fallback: If we don't know the owner column, we just allow authenticated users to SELECT.
             -- This satisfies the security warning "RLS enabled but no policies exist".

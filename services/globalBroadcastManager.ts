@@ -6,9 +6,8 @@
  */
 
 import { supabase } from "./supabaseClient";
-import type { Song, RadioState, ChatMessage } from "../types";
+import type { Song, RadioState } from "../types";
 import { PersistentRadioService } from "./PersistentRadioService";
-import { LocalAiService } from "./LocalAiService";
 
 type EventCallback = (...args: any[]) => void;
 
@@ -22,6 +21,7 @@ interface BroadcastState {
   volume: number;
   isMuted: boolean;
   isPlaying: boolean;
+  leaderId: string | null;
 }
 
 /**
@@ -34,12 +34,16 @@ export class GlobalBroadcastManager {
   private eventListeners: Map<string, Set<EventCallback>>;
   private state: BroadcastState;
   private timeUpdateInterval: number | null = null;
-  private simulationInterval: number | null = null;
+  private audioContext: AudioContext | null = null;
+  private analyser: AnalyserNode | null = null;
+  private dataArray: Uint8Array | null = null;
 
   // Leader Election
   private userId: string | null = null;
   private isLeaderLocal: boolean = false;
   private heartbeatInterval: number | null = null;
+  private conductorInterval: number | null = null;
+  private lastCommandId: string | null = null;
 
   private constructor() {
     // CRITICAL: Check if there's already an audio element playing from a leaked instance
@@ -55,6 +59,7 @@ export class GlobalBroadcastManager {
     // Create the audio element
     this.audioElement = new Audio();
     this.audioElement.preload = "auto";
+    this.audioElement.crossOrigin = "anonymous";
     (globalThis as any).__CLUB_YOUNIVERSE_AUDIO__ = this.audioElement;
 
     // Initialize event listeners map
@@ -125,6 +130,49 @@ export class GlobalBroadcastManager {
     this.tryClaimLeadership();
   }
 
+  public getLeaderId() {
+    return this.state.leaderId;
+  }
+
+  public async claimLeadership() {
+    if (!this.userId) return false;
+    const now = new Date();
+    const { error } = await supabase
+      .from("broadcasts")
+      .update({
+        leader_id: this.userId,
+        last_heartbeat: now.toISOString(),
+      })
+      .or(`leader_id.is.null,last_heartbeat.lt.${new Date(Date.now() - 10000).toISOString()}`);
+
+    if (!error) {
+      console.log("👑 Leadership claimed manually");
+      this.isLeaderLocal = true;
+      this.state.leaderId = this.userId;
+      this.emit("leaderIdChanged", this.userId);
+      this.emit("leaderChanged", true);
+      this.startConductorLoop();
+      await this.fetchAndSync();
+    }
+    return !error;
+  }
+
+  public async releaseLeadership() {
+    if (!this.isLeaderLocal || !this.userId) return;
+    const { error } = await supabase
+      .from("broadcasts")
+      .update({
+        leader_id: null,
+      })
+      .eq("leader_id", this.userId);
+
+    if (!error) {
+      this.isLeaderLocal = false;
+      this.emit("leaderChanged", false);
+      await this.fetchAndSync();
+    }
+  }
+
   private async tryClaimLeadership() {
     try {
       // 1. Fetch current leader status
@@ -134,77 +182,80 @@ export class GlobalBroadcastManager {
         .limit(1)
         .single();
 
-      if (error) {
-        console.error("❌ Leadership check failed - broadcasts query error:", error.message);
-        return;
-      }
-      if (!data) {
-        console.warn("⚠️ No broadcast row found! Please ensure the broadcasts table has a row.");
-        return;
+      if (error) return;
+
+      const remoteLeaderId = data.leader_id;
+      const lastHeartbeat = data.last_heartbeat ? new Date(data.last_heartbeat).getTime() : 0;
+      const isLeaderDead = !remoteLeaderId || (Date.now() - lastHeartbeat > 10000);
+
+      if (this.state.leaderId !== remoteLeaderId) {
+        this.state.leaderId = remoteLeaderId;
+        this.emit("leaderIdChanged", remoteLeaderId);
       }
 
-      const now = new Date();
-      const heartbeat = data.last_heartbeat
-        ? new Date(data.last_heartbeat)
-        : new Date(0);
-      const secondsSinceHeartbeat =
-        (now.getTime() - heartbeat.getTime()) / 1000;
-      const isCurrentLeaderDead = secondsSinceHeartbeat > 4; // 4s timeout (aggressive recovery)
-      const amILeader = data.leader_id === this.userId;
+      const amILeader = remoteLeaderId === this.userId;
+
+      // AUTO-CLAIM: If there is no leader, or the leader is dead, try to claim it
+      if (isLeaderDead && this.userId) {
+        console.log("🔦 Leader is missing or dead. Attempting auto-claim...");
+        await this.claimLeadership();
+        return; // Next interval will pick up the change
+      }
 
       if (amILeader) {
-        // I am the leader. Refresh heartbeat.
-        this.isLeaderLocal = true;
-        // console.log("👑 I am the LEADER. Sending heartbeat...");
+        if (!this.isLeaderLocal) {
+          console.log("👑 I am now the Global Leader.");
+          this.isLeaderLocal = true;
+          this.emit("leaderChanged", true);
+          this.startConductorLoop();
+
+          // RE-CHECK TRIGGERS: If I just became leader, check if there's a trigger waiting
+          this.fetchAndSync();
+        }
         await supabase
           .from("broadcasts")
-          .update({ last_heartbeat: now.toISOString() })
-          .eq("leader_id", this.userId); // Safety check
-
-        // HEALTH CHECK
-        const newSong = await PersistentRadioService.checkRadioHealth(this.state.nowPlaying);
-        if (newSong && newSong.id !== this.state.nowPlaying?.id) {
-          await this.setNowPlaying(newSong);
-        }
-      } else if (isCurrentLeaderDead || !data.leader_id) {
-        // Leader is dead or missing. Claim it!
-        console.log(
-          `👑 Leader missing (${secondsSinceHeartbeat.toFixed(1)}s ago). Claiming throne...`,
-        );
-
-        // Atomic claim attempted via RLS/Update
-        // We update WHERE leader_id is what we saw (Optimistic Lock) or if it's null
-        const claimFilter = data.leader_id
-          ? `leader_id.is.null,leader_id.eq.${data.leader_id}`
-          : `leader_id.is.null`;
-
-        const { error: claimError } = await supabase
-          .from("broadcasts")
-          .update({
-            leader_id: this.userId,
-            last_heartbeat: now.toISOString(),
-          })
-          .or(claimFilter);
-
-        if (!claimError) {
-          this.isLeaderLocal = true;
-          console.log("👑 Leadership CLAIMED!");
-          this.emit("leaderChanged", true);
-          this.startSimulation();
-        } else {
-          console.error("❌ Leadership claim FAILED:", claimError);
-        }
-      } else {
-        // Someone else is leader and healthy.
-        if (this.isLeaderLocal) {
-          console.log("👑 Leadership LOST.");
-          this.isLeaderLocal = false;
-          this.emit("leaderChanged", false);
-          this.stopSimulation();
-        }
+          .update({ last_heartbeat: new Date().toISOString() })
+          .eq("leader_id", this.userId);
+      } else if (this.isLeaderLocal) {
+        // I thought I was leader, but DB says otherwise
+        console.log("📉 Leadership lost to:", remoteLeaderId);
+        this.isLeaderLocal = false;
+        this.stopConductorLoop();
+        this.emit("leaderChanged", false);
       }
     } catch (e) {
       console.error("Election error:", e);
+    }
+  }
+
+  private startConductorLoop() {
+    if (this.conductorInterval) clearInterval(this.conductorInterval);
+    console.log("👑 GlobalBroadcastManager: Starting Conductor Loop...");
+
+    this.conductorInterval = window.setInterval(async () => {
+      if (!this.isLeaderLocal) return;
+
+      try {
+        // 1. Health Check (Zombie / Silence Prevention)
+        const nextSong = await PersistentRadioService.checkRadioHealth(this.state.nowPlaying);
+        if (nextSong) {
+          console.log("🛠️ Conductor: Kickstarted station with:", nextSong.title);
+          await this.setNowPlaying(nextSong);
+        }
+
+        // 2. Voting Simulation
+        await PersistentRadioService.runSimulationStep();
+      } catch (e) {
+        console.error("Conductor error:", e);
+      }
+    }, 10000); // 10s check
+  }
+
+  private stopConductorLoop() {
+    if (this.conductorInterval) {
+      console.log("🛑 GlobalBroadcastManager: Stopping Conductor Loop.");
+      clearInterval(this.conductorInterval);
+      this.conductorInterval = null;
     }
   }
 
@@ -233,45 +284,10 @@ export class GlobalBroadcastManager {
       volume,
       isMuted,
       isPlaying: false,
+      leaderId: null,
     };
   }
 
-  private startSimulation() {
-    if (this.simulationInterval) clearInterval(this.simulationInterval);
-    this.simulationInterval = window.setInterval(async () => {
-      if (this.isLeaderLocal && this.state.isPlaying) {
-        await PersistentRadioService.runSimulationStep();
-
-        // OCCASIONAL AI ROAST (Leader only)
-        // ~10% chance every 800ms
-        if (Math.random() > 0.9) {
-          const { data: boxSongs } = await supabase.from("songs").select("*").eq("status", "in_box").limit(2);
-          if (boxSongs && boxSongs.length > 0) {
-            const target = boxSongs[Math.floor(Math.random() * boxSongs.length)];
-            const roast = await LocalAiService.generateRoast(target);
-
-            await supabase.channel('club-chat').send({
-              type: 'broadcast',
-              event: 'new_message',
-              payload: {
-                id: `dj-roast-${Date.now()}`,
-                user: { name: "THE ARCHITECT", isAdmin: true },
-                text: roast,
-                timestamp: Date.now()
-              } as ChatMessage
-            });
-          }
-        }
-      }
-    }, 800);
-  }
-
-  private stopSimulation() {
-    if (this.simulationInterval) {
-      clearInterval(this.simulationInterval);
-      this.simulationInterval = null;
-    }
-  }
 
   /**
    * Connect to Supabase for the Source of Truth
@@ -328,12 +344,22 @@ export class GlobalBroadcastManager {
     const remoteState = data.radio_state as RadioState;
 
     // Sync Radio State
-    if (this.state.radioState !== remoteState) {
-      console.log(
-        `📻 Global State Update: ${this.state.radioState} -> ${remoteState}`,
-      );
-      this.state.radioState = remoteState;
-      this.emit("radioStateChanged", remoteState);
+    const actionStates: RadioState[] = ['POOL', 'THE_BOX', 'BOX_WIN', 'REBOOT'];
+    const isActionState = actionStates.includes(remoteState);
+
+    if (this.state.radioState !== remoteState || isActionState) {
+      if (this.state.radioState !== remoteState) {
+        console.log(
+          `📻 Global State Update: ${this.state.radioState} -> ${remoteState}`,
+        );
+        this.state.radioState = remoteState;
+        this.emit("radioStateChanged", remoteState);
+      }
+
+      // LEADER ACTION: If a trigger state is detected, perform the action
+      if (this.isLeaderLocal && isActionState) {
+        this.handleStateTrigger(remoteState);
+      }
     }
 
     // Sync Next Song
@@ -362,8 +388,51 @@ export class GlobalBroadcastManager {
     }
 
     // Sync Site Commands
-    if (data.site_command) {
+    if (data.site_command && data.site_command.id && data.site_command.id !== this.lastCommandId) {
+      this.lastCommandId = data.site_command.id;
       this.emit("siteCommandReceived", data.site_command);
+    }
+  }
+
+  /**
+   * handleStateTrigger - Executes logic for Admin Triggers
+   */
+  private async handleStateTrigger(state: RadioState) {
+    console.log(`⚡ Triggering Action: ${state}`);
+
+    switch (state) {
+      case 'POOL': // Cycle (Btn P)
+      case 'BOX_WIN': // Force Win (Btn W)
+        console.log("🎬 Cycle/Win Triggered");
+        const nextSong = await PersistentRadioService.handleSongEnded(this.state.nowPlaying);
+        if (nextSong) {
+          await this.setNowPlaying(nextSong);
+        } else {
+          // If fallback fails, return to NOW_PLAYING to stop loop
+          await this.setRadioState('NOW_PLAYING');
+        }
+        break;
+
+      case 'THE_BOX': // Refresh Box (Btn B)
+        console.log("♻️ Refresh Box Triggered");
+        await PersistentRadioService.forceRefreshBox();
+        // Return to NOW_PLAYING state after action
+        await this.setRadioState('NOW_PLAYING');
+        break;
+
+      case 'REBOOT': // Force Nuke (Btn N)
+        console.log("☢️ Hard Reset Triggered");
+        await PersistentRadioService.hardReset();
+        // hardReset sets DB state to POOL, which starts the cycle fresh
+        break;
+
+      case 'DJ_TALKING': // Mic Over (Btn M)
+        // No action needed besides state change (UI handles overlay)
+        break;
+
+      default:
+        // Normal states (NOW_PLAYING) don't trigger anything
+        break;
     }
   }
 
@@ -429,8 +498,13 @@ export class GlobalBroadcastManager {
     this.audioElement.addEventListener("error", (e) => {
       const errorDetails = this.audioElement.error;
       console.error("❌ Audio Error Event:", errorDetails ? `Code: ${errorDetails.code}, Message: ${errorDetails.message}` : "Unknown error");
-      // If we have a MediaError, it usually means the source is bad or network failed.
-      // We could try to recover here, but for now just logging detail is enough.
+
+      if (this.isLeaderLocal) {
+        console.log("⚠️ Leader: Audio failed to load. Skipping corrupted track in 3s...");
+        setTimeout(() => {
+          this.handleStateTrigger('POOL');
+        }, 3000);
+      }
       this.emit("audioError", e);
     });
 
@@ -463,6 +537,12 @@ export class GlobalBroadcastManager {
   ): Promise<void> {
     // Optimistic update
     this.state.nowPlaying = song;
+
+    // Consistency: If a song is set, we should be in NOW_PLAYING or DJ_TALKING state
+    if (song && this.state.radioState !== 'NOW_PLAYING' && this.state.radioState !== 'DJ_TALKING') {
+      this.state.radioState = 'NOW_PLAYING';
+      this.emit("radioStateChanged", 'NOW_PLAYING');
+    }
     if (!song) {
       this.audioElement.pause();
       this.audioElement.removeAttribute("src");
@@ -547,6 +627,11 @@ export class GlobalBroadcastManager {
 
     // PERSIST TO GLOBAL STATE (Only if Leader)
     if (this.isLeaderLocal) {
+      // Auto-update Radio State to NOW_PLAYING if we are playing a song
+      if (song && this.state.radioState !== 'NOW_PLAYING') {
+        this.state.radioState = 'NOW_PLAYING';
+        this.emit("radioStateChanged", 'NOW_PLAYING');
+      }
       await this.persistBroadcastState(!hasCorrectSrc || !isSameId);
     }
   }
@@ -591,6 +676,23 @@ export class GlobalBroadcastManager {
   public getNowPlaying() {
     return this.state.nowPlaying;
   }
+
+  public async sendSiteCommand(type: string, payload: any) {
+    const commandId = Math.random().toString(36).substring(2, 15);
+    const cmd = { type, payload, timestamp: Date.now(), id: commandId };
+
+    // Optimistic local trigger
+    this.lastCommandId = commandId;
+    this.emit("siteCommandReceived", cmd);
+
+    try {
+      await supabase.from("broadcasts").update({
+        site_command: cmd
+      }).eq("id", "00000000-0000-0000-0000-000000000000");
+    } catch (e) {
+      console.error("Site Command Failed:", e);
+    }
+  }
   public getNextSong() {
     return this.state.nextSong;
   }
@@ -620,10 +722,35 @@ export class GlobalBroadcastManager {
 
   public async play() {
     if (this.audioElement.paused && this.state.nowPlaying) {
+      // Initialize Audio Analysis on first user interaction (play)
+      if (!this.audioContext) {
+        try {
+          this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+          this.analyser = this.audioContext.createAnalyser();
+          const source = this.audioContext.createMediaElementSource(this.audioElement);
+          source.connect(this.analyser);
+          this.analyser.connect(this.audioContext.destination);
+          this.analyser.fftSize = 64; // Small for performance
+          this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+        } catch (e) {
+          console.warn("AudioContext initialization failed (cross-origin or blocked):", e);
+        }
+      } else if (this.audioContext.state === 'suspended') {
+        this.audioContext.resume();
+      }
+
       await this.audioElement.play();
       this.state.isPlaying = true;
       this.emit("playbackStateChanged", true);
     }
+  }
+
+  public getBassIntensity(): number {
+    if (!this.analyser || !this.dataArray || this.audioElement.paused) return 0;
+    this.analyser.getByteFrequencyData(this.dataArray as any);
+    // Focus on the first few bins (bass)
+    const bassSum = this.dataArray[0] + this.dataArray[1] + this.dataArray[2];
+    return bassSum / 765; // Normalize to 0-1
   }
 
   public pause() {

@@ -84,9 +84,49 @@ insert into storage.buckets (id, name, public) values ('videos', 'videos', true)
 -- 4. PERFORMANCE INDEXES
 -- ==========================================
 create index if not exists songs_status_idx on public.songs (status);
+create index if not exists songs_created_at_idx on public.songs (created_at);
+create index if not exists idx_songs_uploader_id on public.songs (uploader_id);
 create index if not exists profiles_is_artist_idx on public.profiles (is_artist);
 
 -- ==========================================
--- 5. CONFIRMATION
+-- 5. RLS PERFORMANCE FIXES
+-- ==========================================
+-- Consolidate duplicate update policies for better performance
+DROP POLICY IF EXISTS "Users can update their own songs." ON public.songs;
+DROP POLICY IF EXISTS "Admins can update any song." ON public.songs;
+DROP POLICY IF EXISTS "Admins have full update access" ON public.songs;
+DROP POLICY IF EXISTS "songs_master_update_policy" ON public.songs;
+DROP POLICY IF EXISTS "songs_update_policy" ON public.songs;
+
+CREATE POLICY "songs_update_policy"
+ON public.songs FOR UPDATE
+TO authenticated
+USING (
+  (SELECT auth.uid()) = uploader_id 
+  OR 
+  EXISTS (SELECT 1 FROM public.profiles WHERE user_id = (SELECT auth.uid()) AND is_admin = true)
+);
+
+-- ==========================================
+-- 6. RELATIONSHIP REPAIR
+-- ==========================================
+-- Ensure PostgREST can join broadcasts and songs
+ALTER TABLE public.broadcasts DROP CONSTRAINT IF EXISTS broadcasts_current_song_id_fkey;
+ALTER TABLE public.broadcasts DROP CONSTRAINT IF EXISTS broadcasts_next_song_id_fkey;
+
+ALTER TABLE public.broadcasts 
+    ADD CONSTRAINT broadcasts_current_song_id_fkey 
+    FOREIGN KEY (current_song_id) 
+    REFERENCES public.songs(id)
+    ON DELETE SET NULL;
+
+ALTER TABLE public.broadcasts 
+    ADD CONSTRAINT broadcasts_next_song_id_fkey 
+    FOREIGN KEY (next_song_id) 
+    REFERENCES public.songs(id)
+    ON DELETE SET NULL;
+
+-- ==========================================
+-- 7. CONFIRMATION
 -- ==========================================
 select 'Addons applied successfully. Database is ready for persistence.' as status;

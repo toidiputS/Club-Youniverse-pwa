@@ -15,7 +15,7 @@ import { TuneInOverlay } from "./components/TuneInOverlay";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { RadioProvider } from "./contexts/AudioPlayerContext";
 import { supabase } from "./services/supabaseClient";
-import type { View, Session, Profile } from "./types";
+import type { Session, Profile, View } from "./types";
 
 const App: React.FC = () => {
   const [session, setSession] = useState<Session | null>(null);
@@ -35,7 +35,6 @@ const App: React.FC = () => {
         if (error && error.code !== "PGRST116") throw error;
 
         if (!data) {
-          // Auto-create profile
           const { data: newProfile, error: createError } = await supabase
             .from("profiles")
             .insert([{
@@ -74,10 +73,6 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const handleNavigate = (view: View) => {
-    setCurrentView(view);
-  };
-
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     setSession(null);
@@ -85,7 +80,6 @@ const App: React.FC = () => {
   };
 
   const handleAdminLogin = () => {
-    // Mock Admin Session for God Mode
     const mockProfile: Profile = {
       user_id: "god-mode-admin",
       name: "The Creator",
@@ -99,7 +93,6 @@ const App: React.FC = () => {
     };
     setProfile(mockProfile);
     setSession({ user: { id: "god-mode-admin" } } as Session);
-    setCurrentView("dj-booth");
   };
 
   if (loading) {
@@ -127,9 +120,9 @@ const App: React.FC = () => {
         <div className="h-screen relative z-10 flex flex-col overflow-hidden text-white">
           <main className="flex-grow flex flex-col relative min-h-0">
             {currentView === "club" ? (
-              <Club onNavigate={handleNavigate} onSignOut={handleSignOut} profile={profile} setProfile={setProfile} />
+              <Club onNavigate={setCurrentView} onSignOut={handleSignOut} profile={profile} />
             ) : (
-              <DjBooth onNavigate={handleNavigate} onSignOut={handleSignOut} />
+              <DjBooth onNavigate={setCurrentView} />
             )}
           </main>
           <Ticker />

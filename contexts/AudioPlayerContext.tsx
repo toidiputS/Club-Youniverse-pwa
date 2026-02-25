@@ -44,6 +44,10 @@ interface RadioContextType {
   setRadioState: (state: RadioState) => void;
   setNowPlaying: (_song: Song | null) => void;
   setNextSong: (_song: Song | null) => void;
+  downloadSong: (song: Song) => void;
+  leaderId: string | null;
+  claimLeadership: () => Promise<boolean>;
+  releaseLeadership: () => Promise<void>;
 }
 
 export const RadioContext = createContext<RadioContextType | null>(null);
@@ -65,6 +69,7 @@ export const RadioProvider: React.FC<{
   const [isMuted, setIsMutedState] = useState(broadcastManager.isMuted());
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [tickerText, setTickerText] = useState("Welcome to Club Youniverse. Vote in The Box to help shape the station.");
+  const [leaderId, setLeaderId] = useState<string | null>(broadcastManager.getLeaderId());
 
   const togglePlay = useCallback(() => {
     broadcastManager.togglePlay();
@@ -105,6 +110,7 @@ export const RadioProvider: React.FC<{
     broadcastManager.on("timeUpdate", setCurrentTime);
     broadcastManager.on("volumeChanged", setVolumeState);
     broadcastManager.on("mutedChanged", setIsMutedState);
+    broadcastManager.on("leaderIdChanged", setLeaderId);
     broadcastManager.on("siteCommandReceived", (cmd: any) => {
       if (cmd?.type === "ticker") {
         setTickerText(cmd.payload?.text || "");
@@ -127,6 +133,7 @@ export const RadioProvider: React.FC<{
       broadcastManager.off("timeUpdate", setCurrentTime);
       broadcastManager.off("volumeChanged", setVolumeState);
       broadcastManager.off("mutedChanged", setIsMutedState);
+      broadcastManager.off("leaderIdChanged", setLeaderId);
     };
   }, [broadcastManager]);
 
@@ -148,15 +155,26 @@ export const RadioProvider: React.FC<{
     togglePlay,
     addChatMessage,
     setProfile,
+    downloadSong: (song: Song) => {
+      const link = document.createElement('a');
+      link.href = song.audioUrl;
+      link.download = `${song.title} - ${song.artistName}.mp3`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    },
     setTickerText,
     setRadioState,
     setNowPlaying,
-    setNextSong
+    setNextSong,
+    leaderId,
+    claimLeadership: () => broadcastManager.claimLeadership(),
+    releaseLeadership: () => broadcastManager.releaseLeadership(),
   }), [
     nowPlaying, nextSong, radioState, isLeader, isPlaying,
     currentTime, volume, isMuted, chatMessages, profile, tickerText,
     setVolume, setMuted, togglePlay, addChatMessage, setProfile,
-    setTickerText, setRadioState, setNowPlaying, setNextSong
+    setTickerText, setRadioState, setNowPlaying, setNextSong, leaderId
   ]);
 
   return (

@@ -1,10 +1,5 @@
-/**
- * @file Radio Component - The main "Club" experience.
- */
-
 import React, { useContext } from "react";
 import { RadioContext } from "../contexts/AudioPlayerContext";
-import { NowPlay } from "./NowPlay";
 import type { View, Profile } from "../types";
 import { Header } from "./Header";
 import { TheBox } from "./TheBox";
@@ -14,44 +9,37 @@ interface RadioProps {
   onNavigate: (view: View) => void;
   onSignOut: () => void;
   profile: Profile;
-  setProfile: React.Dispatch<React.SetStateAction<Profile | null>>;
 }
 
 export const Radio: React.FC<RadioProps> = ({ onNavigate, onSignOut, profile }) => {
   const context = useContext(RadioContext);
   if (!context) return null;
 
-  // --- PERSISTENT RADIO FOUNDATION is now managed by GlobalBroadcastManager ---
-
   return (
-    <div className="relative h-full w-full overflow-hidden flex flex-col pointer-events-none">
-      {/* Top Header Layer */}
-      <div className="relative z-50 pointer-events-auto p-4 sm:p-6 w-full max-w-7xl mx-auto">
+    <div className="relative h-full w-full overflow-hidden flex flex-col pointer-events-none select-none">
+
+      {/* 1. TOP HUB: Integrated Header */}
+      <div className="relative z-50 pointer-events-auto p-4 sm:p-6 w-full max-w-7xl mx-auto animate-in fade-in slide-in-from-top-4 duration-1000">
         <Header onNavigate={onNavigate} onSignOut={onSignOut} profile={profile} />
       </div>
 
-      {/* Main Experience Layer (Open Center) */}
-      <div className="flex-grow relative z-30 min-h-0 flex flex-col justify-end p-4 sm:p-8">
-        <div className="flex flex-col lg:flex-row pointer-events-none gap-6 justify-between items-end w-full">
+      {/* 2. CENTER: THE FLOOR (Open Space for Visuals) */}
+      <div className="flex-grow relative z-10 min-h-0 container mx-auto px-4 flex flex-col items-center justify-center">
+        {/* The user can add graphical effects here - space is 100% open */}
+        <div className="absolute inset-x-0 bottom-0 h-[40vh] bg-gradient-to-t from-black/80 to-transparent pointer-events-none" />
+      </div>
 
-          {/* Bottom Left: Minimized NowPlay */}
-          <div className="w-full lg:w-[320px] pointer-events-auto animate-in slide-in-from-left-10 duration-700 order-2 lg:order-1">
-            <NowPlay />
-          </div>
-
-          {/* Bottom Right: Minimized The Box */}
-          <div className="w-full lg:w-[450px] pointer-events-auto animate-in slide-in-from-right-10 duration-700 order-1 lg:order-2">
-            <TheBox />
-          </div>
+      {/* 3. SIDE COLUMN: Chat & Voting Stack */}
+      <div className="fixed right-4 bottom-10 top-20 z-40 hidden xl:flex flex-col gap-6 w-80 pointer-events-auto animate-in fade-in slide-in-from-right-4 duration-1000">
+        <div className="flex-grow min-h-0">
+          <TheChat profile={profile} />
+        </div>
+        <div className="flex-shrink-0">
+          <TheBox />
         </div>
       </div>
 
-      {/* Floating Side Layer: Chat */}
-      <div className="fixed right-0 top-1/2 -translate-y-1/2 z-40 hidden xl:flex pointer-events-auto w-80 pr-6">
-        <TheChat profile={profile} />
-      </div>
-
-      {/* Mobile Chat Toggle/Overlay could go here later */}
+      {/* MOBILE CHAT OVERLAY TOGGLE (Optional later, for now just clean) */}
     </div>
   );
 };

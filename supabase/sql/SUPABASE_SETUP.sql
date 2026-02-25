@@ -86,11 +86,11 @@ create policy "Public profiles are viewable by everyone."
 
 create policy "Users can insert their own profile."
   on public.profiles for insert
-  with check ( auth.uid() = user_id );
+  with check ( (select auth.uid()) = user_id );
 
 create policy "Users can update own profile."
   on public.profiles for update
-  using ( auth.uid() = user_id );
+  using ( (select auth.uid()) = user_id );
 
 -- SONGS POLICIES
 create policy "Songs are viewable by everyone."
@@ -99,15 +99,15 @@ create policy "Songs are viewable by everyone."
 
 create policy "Authenticated users can upload songs."
   on public.songs for insert
-  with check ( auth.role() = 'authenticated' );
+  with check ( (select auth.role()) = 'authenticated' );
 
-create policy "Users can update their own songs."
+create policy "Allow authenticated update (owner or admin)"
   on public.songs for update
-  using ( auth.uid() = uploader_id );
-  
-create policy "Admins can update any song."
-  on public.songs for update
-  using ( exists (select 1 from public.profiles where user_id = auth.uid() and is_admin = true) );
+  using (
+    (select auth.uid()) = uploader_id 
+    or 
+    exists (select 1 from public.profiles where user_id = (select auth.uid()) and is_admin = true)
+  );
 
 -- VOTES POLICIES
 create policy "Votes are viewable by everyone."
@@ -116,7 +116,7 @@ create policy "Votes are viewable by everyone."
 
 create policy "Authenticated users can vote."
   on public.votes for insert
-  with check ( auth.role() = 'authenticated' );
+  with check ( (select auth.role()) = 'authenticated' );
 
 -- GALLERY POLICIES
 create policy "Gallery items are viewable by everyone."
@@ -125,7 +125,7 @@ create policy "Gallery items are viewable by everyone."
 
 create policy "Users can add to gallery."
   on public.gallery_items for insert
-  with check ( auth.uid() = user_id );
+  with check ( (select auth.uid()) = user_id );
 
 -- ==========================================
 -- 3. STORAGE BUCKETS
@@ -141,15 +141,15 @@ insert into storage.buckets (id, name, public) values ('videos', 'videos', true)
 -- STORAGE POLICIES (Allow authenticated uploads)
 create policy "Authenticated users can upload songs"
   on storage.objects for insert
-  with check ( bucket_id = 'songs' and auth.role() = 'authenticated' );
+  with check ( bucket_id = 'songs' and (select auth.role()) = 'authenticated' );
 
 create policy "Authenticated users can upload covers"
   on storage.objects for insert
-  with check ( bucket_id = 'covers' and auth.role() = 'authenticated' );
+  with check ( bucket_id = 'covers' and (select auth.role()) = 'authenticated' );
 
 create policy "Authenticated users can upload videos"
   on storage.objects for insert
-  with check ( bucket_id = 'videos' and auth.role() = 'authenticated' );
+  with check ( bucket_id = 'videos' and (select auth.role()) = 'authenticated' );
   
 create policy "Public read access for all buckets"
   on storage.objects for select
