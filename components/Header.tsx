@@ -39,7 +39,7 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onSignOut, profile }
           style={{ boxShadow: `0 0 ${pulse * 30}px rgba(168, 85, 247, 0.2)` }}
         >
           <div className="absolute inset-0 bg-gradient-to-br from-purple-600/20 to-blue-600/20 opacity-40 group-hover:opacity-100 transition-opacity" />
-          <span className="relative text-white/40 text-lg font-black group-hover:text-white transition-colors">Y</span>
+          <img src="/icons/favicon.svg" alt="Youniverse" className="relative w-6 h-6 object-contain opacity-70 group-hover:opacity-100 transition-opacity" />
         </div>
         <div className="flex flex-col group cursor-default">
           <h1 className="text-[11px] font-black text-white/40 tracking-[0.4em] leading-none uppercase group-hover:text-white transition-colors">Club Youniverse</h1>

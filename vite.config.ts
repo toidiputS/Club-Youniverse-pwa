@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon.ico", "apple-touch-icon.png", "masked-icon.svg"],
+      includeAssets: ["icons/favicon.svg", "apple-touch-icon.png", "masked-icon.svg"],
       manifest: {
         name: "Club Youniverse Live",
         short_name: "Youniverse",
@@ -18,6 +18,12 @@ export default defineConfig({
         display: "standalone",
         start_url: "/",
         icons: [
+          {
+            src: "/icons/favicon.svg",
+            sizes: "any",
+            type: "image/svg+xml",
+            purpose: "any maskable"
+          },
           {
             src: "https://ktfezfnkghtwbkmhxdyd.supabase.co/storage/v1/object/public/site_assets/icon-192.png",
             sizes: "192x192",
