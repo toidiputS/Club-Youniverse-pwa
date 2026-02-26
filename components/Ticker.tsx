@@ -18,7 +18,7 @@ export const Ticker: React.FC = () => {
       </div>
 
       <div className="flex-grow items-center">
-        <div className="whitespace-nowrap flex gap-48 animate-marquee">
+        <div className="whitespace-nowrap flex gap-16 sm:gap-48 animate-marquee">
           <span className="text-[10px] font-bold text-zinc-500 tracking-tight uppercase">{tickerText}</span>
           <span className="text-[10px] font-bold text-zinc-500 tracking-tight uppercase">{tickerText}</span>
         </div>

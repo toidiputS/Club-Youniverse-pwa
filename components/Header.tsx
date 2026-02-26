@@ -30,9 +30,9 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onSignOut, profile }
   const { nowPlaying, isPlaying } = context;
 
   return (
-    <header className="relative flex items-center justify-between w-full pointer-events-none p-4">
+    <header className="relative flex flex-wrap items-center justify-between w-full pointer-events-none p-2 sm:p-4 gap-2">
       {/* EXTREME LEFT: Branding */}
-      <div className="flex items-center gap-3 pointer-events-auto">
+      <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto min-w-0 flex-shrink">
         <div
           className="w-10 h-10 bg-zinc-950 rounded-xl flex items-center justify-center border border-white/5 cursor-pointer hover:border-purple-500/50 transition-all relative overflow-hidden group shadow-2xl"
           onClick={() => onNavigate("club")}
@@ -43,14 +43,14 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onSignOut, profile }
         </div>
         <div className="flex flex-col group cursor-default">
           <h1 className="text-[11px] font-black text-white/40 tracking-[0.4em] leading-none uppercase group-hover:text-white transition-colors">Club Youniverse</h1>
-          <div className="flex gap-4 items-center mt-2">
+          <div className="flex flex-wrap gap-2 sm:gap-4 items-center mt-2">
             <div className="flex items-center gap-1.5 min-w-[100px]">
               <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse shadow-[0_0_8px_purple]" />
               <span className="text-[8px] font-black text-zinc-600 uppercase tracking-[0.3em]">Live Active</span>
             </div>
 
             {/* VOLUME CONTROLS */}
-            <div className="flex items-center gap-3 px-3 py-1 bg-white/5 rounded-full border border-white/5 hover:border-white/10 transition-all pointer-events-auto">
+            <div className="hidden sm:flex items-center gap-3 px-3 py-1 bg-white/5 rounded-full border border-white/5 hover:border-white/10 transition-all pointer-events-auto">
               <button
                 onClick={() => context.setMuted(!context.isMuted)}
                 className="text-zinc-500 hover:text-white transition-colors"
@@ -86,7 +86,7 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onSignOut, profile }
 
             <button
               onClick={() => onNavigate("dj-booth")}
-              className="px-5 py-2 bg-white text-black rounded-full text-[9px] font-black uppercase tracking-[0.2em] hover:bg-purple-500 hover:text-white transition-all cursor-pointer shadow-[0_0_20px_rgba(255,255,255,0.2)] hover:shadow-[0_0_20px_rgba(168,85,247,0.4)]"
+              className="px-3 sm:px-5 py-1.5 sm:py-2 bg-white text-black rounded-full text-[8px] sm:text-[9px] font-black uppercase tracking-[0.1em] sm:tracking-[0.2em] hover:bg-purple-500 hover:text-white transition-all cursor-pointer shadow-[0_0_20px_rgba(255,255,255,0.2)] hover:shadow-[0_0_20px_rgba(168,85,247,0.4)] whitespace-nowrap"
             >
               Song Pool ⚡
             </button>
@@ -95,7 +95,7 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onSignOut, profile }
       </div>
 
       {/* EXTREME RIGHT: Now Playing + Profile Minimal Group */}
-      <div className="flex items-center gap-6 pointer-events-auto">
+      <div className="flex items-center gap-2 sm:gap-6 pointer-events-auto flex-shrink-0">
         {nowPlaying && (
           <div className="hidden lg:flex items-center gap-3 border-r border-white/5 pr-6 opacity-60 hover:opacity-100 transition-opacity cursor-default">
             <div className="flex flex-col items-end min-w-[100px]">

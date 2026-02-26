@@ -44,6 +44,8 @@ export class GlobalBroadcastManager {
   private heartbeatInterval: number | null = null;
   private conductorInterval: number | null = null;
   private lastCommandId: string | null = null;
+  private releasedAt: number = 0; // Timestamp of last voluntary release
+  private siteCommandChannel: any = null; // Dedicated broadcast channel for ephemeral commands
 
   private constructor() {
     // CRITICAL: Check if there's already an audio element playing from a leaked instance
@@ -136,17 +138,19 @@ export class GlobalBroadcastManager {
 
   public async claimLeadership() {
     if (!this.userId) return false;
+    this.releasedAt = 0; // Clear any release cooldown
     const now = new Date();
+    // Force-claim: No filter — manual Take Deck always wins
     const { error } = await supabase
       .from("broadcasts")
       .update({
         leader_id: this.userId,
         last_heartbeat: now.toISOString(),
       })
-      .or(`leader_id.is.null,last_heartbeat.lt.${new Date(Date.now() - 10000).toISOString()}`);
+      .eq("id", "00000000-0000-0000-0000-000000000000");
 
     if (!error) {
-      console.log("👑 Leadership claimed manually");
+      console.log("👑 Leadership claimed manually (force)");
       this.isLeaderLocal = true;
       this.state.leaderId = this.userId;
       this.emit("leaderIdChanged", this.userId);
@@ -167,7 +171,12 @@ export class GlobalBroadcastManager {
       .eq("leader_id", this.userId);
 
     if (!error) {
+      console.log("👑 Leadership released voluntarily.");
       this.isLeaderLocal = false;
+      this.releasedAt = Date.now(); // Prevent auto-reclaim for a cooldown period
+      this.state.leaderId = null;
+      this.stopConductorLoop();
+      this.emit("leaderIdChanged", null);
       this.emit("leaderChanged", false);
       await this.fetchAndSync();
     }
@@ -196,7 +205,9 @@ export class GlobalBroadcastManager {
       const amILeader = remoteLeaderId === this.userId;
 
       // AUTO-CLAIM: If there is no leader, or the leader is dead, try to claim it
-      if (isLeaderDead && this.userId) {
+      // But skip if we just voluntarily released (15s cooldown)
+      const releaseCooldown = Date.now() - this.releasedAt < 15000;
+      if (isLeaderDead && this.userId && !releaseCooldown) {
         console.log("🔦 Leader is missing or dead. Attempting auto-claim...");
         await this.claimLeadership();
         return; // Next interval will pick up the change
@@ -308,7 +319,7 @@ export class GlobalBroadcastManager {
       console.error("❌ Failed to fetch broadcast state:", error);
     }
 
-    // 2. Subscribe to Realtime changes
+    // 2. Subscribe to Realtime DB changes (for state, songs, leadership)
     supabase
       .channel("public:broadcasts")
       .on(
@@ -321,6 +332,22 @@ export class GlobalBroadcastManager {
       )
       .subscribe((status) => {
         console.log("📡 Broadcast Subscription Status:", status);
+      });
+
+    // 3. Subscribe to dedicated Broadcast channel for ephemeral site commands
+    // This is separate from postgres_changes and more reliable for transient messages
+    this.siteCommandChannel = supabase
+      .channel("site-commands")
+      .on("broadcast", { event: "site_command" }, (payload: any) => {
+        const cmd = payload.payload;
+        console.log("📡 Site Command received via broadcast channel:", cmd);
+        if (cmd && cmd.id && cmd.id !== this.lastCommandId) {
+          this.lastCommandId = cmd.id;
+          this.emit("siteCommandReceived", cmd);
+        }
+      })
+      .subscribe((status: string) => {
+        console.log("📡 Site Command Channel Status:", status);
       });
   }
 
@@ -681,11 +708,22 @@ export class GlobalBroadcastManager {
     const commandId = Math.random().toString(36).substring(2, 15);
     const cmd = { type, payload, timestamp: Date.now(), id: commandId };
 
-    // Optimistic local trigger
+    // Fire locally immediately for the sender
     this.lastCommandId = commandId;
     this.emit("siteCommandReceived", cmd);
 
     try {
+      // PRIMARY: Send via Supabase Broadcast channel (instant, ephemeral)
+      if (this.siteCommandChannel) {
+        await this.siteCommandChannel.send({
+          type: "broadcast",
+          event: "site_command",
+          payload: cmd,
+        });
+        console.log("📡 Site command sent via broadcast channel:", type);
+      }
+
+      // SECONDARY: Also persist to DB as fallback
       await supabase.from("broadcasts").update({
         site_command: cmd
       }).eq("id", "00000000-0000-0000-0000-000000000000");
