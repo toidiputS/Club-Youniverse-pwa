@@ -29,8 +29,8 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, onSignOut, profile }) 
         <div className="absolute inset-x-0 bottom-0 h-[40vh] bg-gradient-to-t from-black/80 to-transparent pointer-events-none" />
       </div>
 
-      {/* 3. SIDE COLUMN: Chat & Voting Stack */}
-      <div className="fixed right-4 bottom-10 top-20 z-40 hidden xl:flex flex-col gap-6 w-80 pointer-events-auto animate-in fade-in slide-in-from-right-4 duration-1000">
+      {/* 3. SIDE COLUMN: Chat & Voting Stack (Mobile First layout) */}
+      <div className="fixed right-2 bottom-16 top-20 xl:right-4 z-40 flex flex-col gap-2 xl:gap-6 w-72 xl:w-80 pointer-events-auto animate-in fade-in slide-in-from-right-4 duration-1000 overflow-hidden xl:overflow-visible">
         <div className="flex-grow min-h-0">
           <TheChat profile={profile} />
         </div>
@@ -38,8 +38,6 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, onSignOut, profile }) 
           <TheBox />
         </div>
       </div>
-
-      {/* MOBILE CHAT OVERLAY TOGGLE (Optional later, for now just clean) */}
     </div>
   );
 };
