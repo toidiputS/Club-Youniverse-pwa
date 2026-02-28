@@ -77,7 +77,7 @@ export const TheChat: React.FC<TheChatProps> = ({ profile }) => {
     }, [context.radioState, profile.is_admin]);
 
     return (
-        <div className="flex flex-col h-full bg-black/5 backdrop-blur-3xl rounded-xl border border-white/[0.03] overflow-hidden transition-all select-none">
+        <div className="flex flex-col h-full overflow-hidden transition-all select-none">
             {/* Chat Messages */}
             <div
                 ref={scrollRef}
@@ -95,7 +95,7 @@ export const TheChat: React.FC<TheChatProps> = ({ profile }) => {
                                 </div>
                                 <div className={`text-[10px] font-medium leading-[1.3] ${isMention
                                     ? 'text-purple-300 border-l border-purple-500/30 pl-2 bg-purple-500/5 py-0.5'
-                                    : 'text-zinc-500'}`}>
+                                    : 'text-zinc-400'}`}>
                                     {msg.text}
                                 </div>
                             </div>
@@ -105,13 +105,13 @@ export const TheChat: React.FC<TheChatProps> = ({ profile }) => {
             </div>
 
             {/* Tight Input Area */}
-            <form onSubmit={handleSend} className="p-2 bg-black/10 border-t border-white/[0.03]">
+            <form onSubmit={handleSend} className="p-2 border-t border-white/[0.03]">
                 <input
                     type="text"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     placeholder="@dj..."
-                    className="w-full bg-black/20 border border-white/[0.05] rounded-lg py-1 px-3 text-[10px] text-white/60 placeholder-zinc-800 focus:outline-none focus:border-purple-500/10 transition-all"
+                    className="w-full bg-black/40 border-none rounded-lg py-2 px-3 text-[10px] text-white/80 placeholder-zinc-800 focus:outline-none focus:ring-1 focus:ring-purple-500/20 transition-all"
                 />
             </form>
         </div>
