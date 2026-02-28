@@ -30,11 +30,11 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, onSignOut, profile }) 
       </div>
 
       {/* 3. SIDE COLUMN: Chat & Voting Stack (Mobile First layout) */}
-      <div className="fixed right-2 bottom-16 top-20 xl:right-4 z-40 flex flex-col gap-2 xl:gap-6 w-72 xl:w-80 pointer-events-auto animate-in fade-in slide-in-from-right-4 duration-1000 overflow-hidden xl:overflow-visible">
+      <div className="fixed inset-x-0 bottom-16 top-20 xl:inset-auto xl:right-4 xl:bottom-10 xl:top-20 z-40 flex flex-col gap-2 xl:gap-6 w-full xl:w-80 pointer-events-auto animate-in fade-in slide-in-from-right-4 duration-1000 overflow-hidden xl:overflow-visible">
         <div className="flex-grow min-h-0">
           <TheChat profile={profile} />
         </div>
-        <div className="flex-shrink-0">
+        <div className="flex-shrink-0 px-2 xl:px-0">
           <TheBox />
         </div>
       </div>

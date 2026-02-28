@@ -11,7 +11,7 @@ export const TheBox: React.FC = () => {
   const context = useContext(RadioContext);
   if (!context) return null;
 
-  const { radioState } = context;
+  const { radioState, nowPlaying } = context;
   const [candidates, setCandidates] = useState<Song[]>([]);
   const [votedId, setVotedId] = useState<string | null>(null);
 
@@ -113,12 +113,43 @@ export const TheBox: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-2">
+        {/* On Air / Now Playing Info Box */}
+        <div className="group relative flex flex-col p-2 xl:p-3 rounded-[1.5rem] xl:rounded-[2.5rem] border-2 border-green-500/30 bg-green-500/5 transition-all duration-700 overflow-hidden shadow-2xl">
+          <div className="relative aspect-square rounded-[1rem] xl:rounded-[1.8rem] overflow-hidden mb-2 xl:mb-3 border border-white/10 shadow-inner">
+            {nowPlaying ? (
+              <img
+                src={nowPlaying.coverArtUrl || `https://picsum.photos/seed/${nowPlaying.id}/100`}
+                className="w-full h-full object-cover grayscale opacity-50"
+                alt={nowPlaying.title}
+              />
+            ) : (
+              <div className="w-full h-full bg-zinc-900 flex items-center justify-center">
+                <div className="w-1 h-1 rounded-full bg-green-500 animate-ping" />
+              </div>
+            )}
+            {/* Minimal Vote Badge */}
+            <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded-full flex items-center justify-center border border-white/10 shadow-lg">
+              <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse mr-1" />
+              <span className="text-[8px] font-black text-green-400">ON AIR</span>
+            </div>
+          </div>
+          <div className="w-full text-left px-1">
+            <h4 className="text-[9px] xl:text-[11px] font-black text-white leading-none truncate uppercase tracking-tight">
+              {nowPlaying?.title || "Silence"}
+            </h4>
+            <p className="text-zinc-600 text-[7px] xl:text-[8px] font-bold truncate uppercase tracking-tighter mt-1 group-hover:text-zinc-400 transition-colors">
+              {nowPlaying?.artistName || "Unknown Payload"}
+            </p>
+          </div>
+        </div>
+
+        {/* Voting Candidates */}
         {[0, 1].map((idx) => {
           const song = candidates[idx];
           if (!song) return (
-            <div key={`empty-${idx}`} className="aspect-square bg-zinc-900/40 border-2 border-white/[0.03] rounded-[2.5rem] flex items-center justify-center">
-              <span className="text-[8px] font-black uppercase tracking-[0.3em] text-zinc-800 animate-pulse">Syncing...</span>
+            <div key={`empty-${idx}`} className="aspect-square bg-zinc-900/40 border-2 border-white/[0.03] rounded-[1.5rem] xl:rounded-[2.5rem] flex items-center justify-center mt-auto mb-auto">
+              <span className="text-[7px] font-black uppercase tracking-[0.3em] text-zinc-800 animate-pulse">Syncing...</span>
             </div>
           );
 
@@ -127,13 +158,13 @@ export const TheBox: React.FC = () => {
               key={song.id}
               onClick={() => handleVote(song.id)}
               disabled={!!votedId}
-              className={`group relative flex flex-col p-3 rounded-[2.5rem] border-2 transition-all duration-700 overflow-hidden ${votedId === song.id
+              className={`group relative flex flex-col p-2 xl:p-3 rounded-[1.5rem] xl:rounded-[2.5rem] border-2 transition-all duration-700 overflow-hidden ${votedId === song.id
                 ? 'border-purple-600 bg-purple-600/10 shadow-[0_0_20px_rgba(147,51,234,0.1)]'
                 : 'border-white/[0.06] bg-zinc-950/60 hover:bg-zinc-900 hover:border-white/20 shadow-2xl'
                 }`}
             >
               {/* Massive Rounded Thumbnail */}
-              <div className="relative aspect-square rounded-[1.8rem] overflow-hidden mb-3 border border-white/10 shadow-inner">
+              <div className="relative aspect-square rounded-[1rem] xl:rounded-[1.8rem] overflow-hidden mb-2 xl:mb-3 border border-white/10 shadow-inner">
                 <img
                   src={song.coverArtUrl || `https://picsum.photos/seed/${song.id}/100`}
                   className={`w-full h-full object-cover transition-all duration-1000 ${votedId && votedId !== song.id ? 'opacity-10 grayscale' : 'group-hover:scale-110'}`}
@@ -141,8 +172,8 @@ export const TheBox: React.FC = () => {
                 />
 
                 {/* Minimal Vote Badge */}
-                <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md w-6 h-6 rounded-full flex items-center justify-center border border-white/10 shadow-lg">
-                  <span className="text-[10px] font-black text-white/70">{song.upvotes || 0}</span>
+                <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md w-5 h-5 xl:w-6 xl:h-6 rounded-full flex items-center justify-center border border-white/10 shadow-lg">
+                  <span className="text-[8px] xl:text-[10px] font-black text-white/70">{song.upvotes || 0}</span>
                 </div>
 
                 {votedId === song.id && (
@@ -153,10 +184,10 @@ export const TheBox: React.FC = () => {
               </div>
 
               <div className="w-full text-left px-1">
-                <h4 className="text-[11px] font-black text-white leading-none truncate uppercase tracking-tight">
+                <h4 className="text-[9px] xl:text-[11px] font-black text-white leading-none truncate uppercase tracking-tight">
                   {song.title}
                 </h4>
-                <p className="text-zinc-600 text-[8px] font-bold truncate uppercase tracking-tighter mt-1 group-hover:text-zinc-400 transition-colors">
+                <p className="text-zinc-600 text-[7px] xl:text-[8px] font-bold truncate uppercase tracking-tighter mt-1 group-hover:text-zinc-400 transition-colors">
                   {song.artistName}
                 </p>
               </div>
