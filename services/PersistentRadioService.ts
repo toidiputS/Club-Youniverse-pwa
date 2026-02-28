@@ -38,7 +38,7 @@ export class PersistentRadioService {
             const startedAt = new Date(broadcast.song_started_at).getTime();
             const now = Date.now();
             const elapsed = (now - startedAt) / 1000;
-            const margin = 10; // 10 second safety margin
+            const margin = 30; // 30 second safety margin (accounts for clock drift or buffering pauses)
 
             if (elapsed > nowPlaying.durationSec + margin) {
                 console.log(`🧟 Watchdog: Zombie detected! (${elapsed.toFixed(1)}s elapsed for ${nowPlaying.durationSec}s song). Force transitioning...`);

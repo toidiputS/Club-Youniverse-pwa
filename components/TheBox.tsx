@@ -104,19 +104,28 @@ export const TheBox: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col gap-4 transition-all select-none">
-      <div className="flex items-center justify-between px-2">
-        <h3 className="text-[11px] font-black uppercase tracking-[0.6em] text-white/30 font-serif">The Box</h3>
+    <div className="flex flex-col h-full bg-transparent w-full">
+      {/* Box Header - Minimalist */}
+      <div className="w-full flex justify-between items-center mb-2 px-2">
         <div className="flex items-center gap-2">
-          <div className="w-1.5 h-1.5 rounded-full bg-red-600 shadow-[0_0_8px_rgba(220,38,38,0.8)] animate-pulse" />
-          <span className="text-[8px] font-black text-white/20 uppercase tracking-widest">Live Vote</span>
+          <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+          <h2 className="text-[10px] font-black tracking-[0.3em] uppercase text-zinc-400">
+            The <span className="text-purple-400">Box</span>
+          </h2>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">{formatTime(timeLeft)}</span>
+          <div className="flex items-center gap-1 opacity-50">
+            <Users className="w-3 h-3 text-zinc-400" />
+            <span className="text-[9px] font-bold text-zinc-400">{totalVotes}</span>
+          </div>
         </div>
       </div>
 
       <div className="grid grid-cols-3 gap-2">
         {/* On Air / Now Playing Info Box */}
-        <div className="group relative flex flex-col p-2 xl:p-3 rounded-[1.5rem] xl:rounded-[2.5rem] border-2 border-green-500/30 bg-green-500/5 transition-all duration-700 overflow-hidden shadow-2xl">
-          <div className="relative aspect-square rounded-[1rem] xl:rounded-[1.8rem] overflow-hidden mb-2 xl:mb-3 border border-white/10 shadow-inner">
+        <div className="group relative flex flex-col p-1.5 rounded-xl border border-green-500/20 bg-green-500/5 transition-all duration-700 overflow-hidden">
+          <div className="relative h-16 rounded-lg overflow-hidden mb-1.5 border border-white/5">
             {nowPlaying ? (
               <img
                 src={nowPlaying.coverArtUrl || `https://picsum.photos/seed/${nowPlaying.id}/100`}
@@ -129,17 +138,17 @@ export const TheBox: React.FC = () => {
               </div>
             )}
             {/* Minimal Vote Badge */}
-            <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded-full flex items-center justify-center border border-white/10 shadow-lg">
-              <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse mr-1" />
-              <span className="text-[8px] font-black text-green-400">ON AIR</span>
+            <div className="absolute top-1 right-1 bg-black/60 backdrop-blur-md px-1.5 py-0.5 rounded-full flex items-center justify-center border border-white/10">
+              <div className="w-1 h-1 rounded-full bg-green-500 animate-pulse mr-1" />
+              <span className="text-[7px] font-black text-green-400 tracking-wider">ON AIR</span>
             </div>
           </div>
           <div className="w-full text-left px-1">
-            <h4 className="text-[9px] xl:text-[11px] font-black text-white leading-none truncate uppercase tracking-tight">
+            <h4 className="text-[10px] font-black text-white leading-tight truncate uppercase tracking-tight">
               {nowPlaying?.title || "Silence"}
             </h4>
-            <p className="text-zinc-600 text-[7px] xl:text-[8px] font-bold truncate uppercase tracking-tighter mt-1 group-hover:text-zinc-400 transition-colors">
-              {nowPlaying?.artistName || "Unknown Payload"}
+            <p className="text-zinc-500 text-[8px] font-bold truncate uppercase tracking-tighter group-hover:text-zinc-400 transition-colors">
+              {nowPlaying?.artistName || "Unknown"}
             </p>
           </div>
         </div>
@@ -148,8 +157,8 @@ export const TheBox: React.FC = () => {
         {[0, 1].map((idx) => {
           const song = candidates[idx];
           if (!song) return (
-            <div key={`empty-${idx}`} className="aspect-square bg-zinc-900/40 border-2 border-white/[0.03] rounded-[1.5rem] xl:rounded-[2.5rem] flex items-center justify-center mt-auto mb-auto">
-              <span className="text-[7px] font-black uppercase tracking-[0.3em] text-zinc-800 animate-pulse">Syncing...</span>
+            <div key={`empty-${idx}`} className="h-full min-h-[5rem] bg-zinc-900/40 border border-white/[0.03] rounded-xl flex items-center justify-center">
+              <span className="text-[8px] font-black uppercase tracking-[0.3em] text-zinc-700 animate-pulse">Syncing...</span>
             </div>
           );
 
@@ -158,36 +167,36 @@ export const TheBox: React.FC = () => {
               key={song.id}
               onClick={() => handleVote(song.id)}
               disabled={!!votedId}
-              className={`group relative flex flex-col p-2 xl:p-3 rounded-[1.5rem] xl:rounded-[2.5rem] border-2 transition-all duration-700 overflow-hidden ${votedId === song.id
-                ? 'border-purple-600 bg-purple-600/10 shadow-[0_0_20px_rgba(147,51,234,0.1)]'
-                : 'border-white/[0.06] bg-zinc-950/60 hover:bg-zinc-900 hover:border-white/20 shadow-2xl'
+              className={`group relative flex flex-col p-1.5 rounded-xl border transition-all duration-500 overflow-hidden ${votedId === song.id
+                ? 'border-purple-600 bg-purple-600/10'
+                : 'border-white/[0.06] bg-zinc-950/60 hover:bg-zinc-900 hover:border-white/20'
                 }`}
             >
-              {/* Massive Rounded Thumbnail */}
-              <div className="relative aspect-square rounded-[1rem] xl:rounded-[1.8rem] overflow-hidden mb-2 xl:mb-3 border border-white/10 shadow-inner">
+              {/* Compact Thumbnail */}
+              <div className="relative h-16 rounded-lg overflow-hidden mb-1.5 border border-white/5">
                 <img
                   src={song.coverArtUrl || `https://picsum.photos/seed/${song.id}/100`}
-                  className={`w-full h-full object-cover transition-all duration-1000 ${votedId && votedId !== song.id ? 'opacity-10 grayscale' : 'group-hover:scale-110'}`}
+                  className={`w-full h-full object-cover transition-all duration-700 ${votedId && votedId !== song.id ? 'opacity-20 grayscale' : 'group-hover:scale-105'}`}
                   alt={song.title}
                 />
 
                 {/* Minimal Vote Badge */}
-                <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md w-5 h-5 xl:w-6 xl:h-6 rounded-full flex items-center justify-center border border-white/10 shadow-lg">
-                  <span className="text-[8px] xl:text-[10px] font-black text-white/70">{song.upvotes || 0}</span>
+                <div className={`absolute top-1 right-1 px-1.5 py-0.5 rounded-full flex items-center justify-center backdrop-blur-md border transition-all ${votedId === song.id
+                  ? 'bg-purple-600/80 border-purple-400'
+                  : 'bg-black/60 border-white/10 group-hover:bg-purple-900/40 group-hover:border-purple-500/30'
+                  }`}>
+                  <span className={`text-[7px] font-black tracking-wider ${votedId === song.id ? 'text-white' : 'text-zinc-300 group-hover:text-purple-300'}`}>
+                    {votedId === song.id ? 'VOTED' : 'VOTE'}
+                  </span>
                 </div>
-
-                {votedId === song.id && (
-                  <div className="absolute inset-0 bg-purple-500/10 flex items-center justify-center">
-                    <div className="w-1 h-1 rounded-full bg-purple-500 animate-ping" />
-                  </div>
-                )}
               </div>
 
+              {/* Minimal Text Info */}
               <div className="w-full text-left px-1">
-                <h4 className="text-[9px] xl:text-[11px] font-black text-white leading-none truncate uppercase tracking-tight">
+                <h4 className={`text-[10px] font-black leading-tight truncate uppercase tracking-tight transition-colors ${votedId === song.id ? 'text-purple-300' : 'text-white'}`}>
                   {song.title}
                 </h4>
-                <p className="text-zinc-600 text-[7px] xl:text-[8px] font-bold truncate uppercase tracking-tighter mt-1 group-hover:text-zinc-400 transition-colors">
+                <p className="text-zinc-500 text-[8px] font-bold truncate uppercase tracking-tighter group-hover:text-zinc-400 transition-colors">
                   {song.artistName}
                 </p>
               </div>

@@ -417,7 +417,14 @@ export class GlobalBroadcastManager {
     // Sync Site Commands
     if (data.site_command && data.site_command.id && data.site_command.id !== this.lastCommandId) {
       this.lastCommandId = data.site_command.id;
-      this.emit("siteCommandReceived", data.site_command);
+
+      // Prevent stale commands from re-triggering on initial load
+      const isStale = data.site_command.timestamp && (Date.now() - data.site_command.timestamp > 10000);
+      if (!isStale) {
+        this.emit("siteCommandReceived", data.site_command);
+      } else {
+        console.log("📡 Ignored stale site command from DB:", data.site_command.type);
+      }
     }
   }
 

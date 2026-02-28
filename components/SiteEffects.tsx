@@ -14,6 +14,13 @@ export const SiteEffects: React.FC = () => {
             console.log("🌌 SiteEffects: Received command", cmd);
 
             if (cmd.type === "trigger_fx") {
+                // Secondary check for stale commands
+                const isStale = cmd.timestamp && (Date.now() - cmd.timestamp > 5000);
+                if (isStale) {
+                    console.log("🌌 SiteEffects: Ignored stale FX command");
+                    return;
+                }
+
                 const fx = cmd.payload?.fx;
                 setActiveFx(fx);
 

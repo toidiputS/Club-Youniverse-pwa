@@ -368,7 +368,7 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
       <div className="relative z-50 md:h-14 py-2 md:py-0 border-b border-white/5 bg-zinc-950/60 backdrop-blur-xl flex flex-col md:flex-row items-center justify-between px-4 md:px-6 gap-4 md:gap-0 shrink-0">
         <div className="flex flex-col md:flex-row items-center gap-4 md:gap-10 w-full md:w-auto">
           <div className="flex flex-col items-center md:items-start text-center md:text-left">
-            <h1 className="text-xs font-black tracking-[0.4em] uppercase text-white">Titan Deck v4</h1>
+            <h1 className="text-xs font-black tracking-[0.4em] uppercase text-white">Club Deck v5</h1>
             <span className="text-[7px] font-bold text-zinc-600 uppercase tracking-[0.2em] mt-0.5">Authorized Node: {profile.user_id?.slice(0, 8)}</span>
           </div>
 

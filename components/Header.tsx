@@ -53,18 +53,18 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onSignOut, profile }
         </div>
 
         {/* Profile */}
-        <div className="flex items-center gap-3 group pointer-events-auto shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3 group pointer-events-auto shrink-0 z-50">
           <div className="flex flex-col items-end">
-            <span className="text-[9px] font-black text-white/40 tracking-wider uppercase group-hover:text-white transition-colors">{profile.name}</span>
+            <span className="text-[8px] sm:text-[9px] font-black text-white/40 tracking-wider uppercase group-hover:text-white transition-colors">{profile.name}</span>
             <button
               onClick={onSignOut}
-              className="text-[7px] font-black text-red-500/30 uppercase tracking-widest hover:text-red-500 transition-colors"
+              className="text-[6px] sm:text-[7px] font-black text-red-500/30 uppercase tracking-widest hover:text-red-500 transition-colors"
             >
               Terminate
             </button>
           </div>
           <div
-            className="w-10 h-10 rounded-xl bg-zinc-950 border border-white/5 overflow-hidden transition-all shadow-2xl"
+            className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-zinc-950 border border-white/5 overflow-hidden transition-all shadow-2xl shrink-0"
             style={{ borderColor: `rgba(168, 85, 247, ${pulse * 0.5})` }}
           >
             <img src={profile.avatar_url || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${profile.user_id}`} alt="Avatar" className="w-full h-full object-cover grayscale opacity-50 group-hover:grayscale-0 group-hover:opacity-100 transition-all" />
@@ -137,6 +137,6 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onSignOut, profile }
           </div>
         </div>
       </div>
-    </header>
+    </header >
   );
 };
