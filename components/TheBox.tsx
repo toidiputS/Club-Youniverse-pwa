@@ -113,12 +113,9 @@ export const TheBox: React.FC = () => {
             The <span className="text-purple-400">Box</span>
           </h2>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">{formatTime(timeLeft)}</span>
-          <div className="flex items-center gap-1 opacity-50">
-            <Users className="w-3 h-3 text-zinc-400" />
-            <span className="text-[9px] font-bold text-zinc-400">{totalVotes}</span>
-          </div>
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)] animate-pulse" />
+          <span className="text-[8px] font-black text-zinc-400 uppercase tracking-widest">Live Vote</span>
         </div>
       </div>
 

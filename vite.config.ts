@@ -19,15 +19,15 @@ export default defineConfig({
         start_url: "/",
         icons: [
           {
-            src: "/icons/favicon.svg",
-            sizes: "any",
-            type: "image/svg+xml",
-            purpose: "any maskable"
-          },
-          {
-            src: "https://ktfezfnkghtwbkmhxdyd.supabase.co/storage/v1/object/public/site_assets/icon-192.png",
+            src: "/icons/icon-192.png",
             sizes: "192x192",
             type: "image/png"
+          },
+          {
+            src: "/icons/icon-192.png",
+            sizes: "192x192",
+            type: "image/png",
+            purpose: "any maskable"
           },
           {
             src: "https://ktfezfnkghtwbkmhxdyd.supabase.co/storage/v1/object/public/site_assets/icon-512.png",
