@@ -16,6 +16,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { RadioProvider } from "./contexts/AudioPlayerContext";
 import { supabase } from "./services/supabaseClient";
 import type { Session, Profile, View } from "./types";
+import { Analytics } from "@vercel/analytics/react";
 
 const App: React.FC = () => {
   const [session, setSession] = useState<Session | null>(null);
@@ -131,6 +132,7 @@ const App: React.FC = () => {
             <Ticker />
           </div>
         </div>
+        <Analytics />
       </RadioProvider>
     </ThemeProvider>
   );

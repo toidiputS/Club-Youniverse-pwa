@@ -365,7 +365,7 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
       </div>
 
       {/* 2. TOP TECHNICAL HUD */}
-      <div className="relative z-50 md:h-14 py-2 md:py-0 border-b border-white/5 bg-zinc-950/60 backdrop-blur-xl flex flex-col md:flex-row items-center justify-between px-4 md:px-6 gap-4 md:gap-0">
+      <div className="relative z-50 md:h-14 py-2 md:py-0 border-b border-white/5 bg-zinc-950/60 backdrop-blur-xl flex flex-col md:flex-row items-center justify-between px-4 md:px-6 gap-4 md:gap-0 shrink-0">
         <div className="flex flex-col md:flex-row items-center gap-4 md:gap-10 w-full md:w-auto">
           <div className="flex flex-col items-center md:items-start text-center md:text-left">
             <h1 className="text-xs font-black tracking-[0.4em] uppercase text-white">Titan Deck v4</h1>
@@ -511,9 +511,9 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
         </div>
 
         {/* CENTER DECK: THE MONITOR & TRANSMITTER */}
-        <div className="flex-grow flex flex-col p-4 gap-4 overflow-hidden relative">
+        <div className="flex-grow flex flex-col p-4 gap-4 overflow-visible md:overflow-hidden relative shrink-0 md:shrink">
           {/* Visualizer/Monitor Grid moved to smaller side slot or kept as background */}
-          <div className="flex-grow flex flex-col min-h-0 bg-zinc-950/40 backdrop-blur-md border border-white/5 rounded-2xl overflow-hidden">
+          <div className="flex-grow flex flex-col min-h-[500px] md:min-h-0 bg-zinc-950/40 backdrop-blur-md border border-white/5 rounded-2xl overflow-visible md:overflow-hidden shrink-0 md:shrink">
             <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-white/5 flex flex-col sm:flex-row items-start sm:items-center justify-between bg-black/40 gap-2">
               <div className="flex items-center gap-3">
                 <span className="text-[10px] font-black text-purple-400 uppercase tracking-[0.4em]">TRANSMISSION LOG</span>
@@ -635,7 +635,7 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
               </div>
             </div>
 
-            <div className="flex-grow overflow-y-auto px-4 py-2 divide-y divide-white/[0.02] min-h-[200px]">
+            <div className="flex-grow overflow-y-auto px-4 py-2 divide-y divide-white/[0.02] min-h-[300px] md:min-h-[200px]">
               {filteredSongs.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center opacity-20 py-20">
                   <div className="w-12 h-12 border-2 border-dashed border-white/20 rounded-full animate-spin mb-4" />
