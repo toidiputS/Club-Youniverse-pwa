@@ -32,6 +32,7 @@ export const TheBox: React.FC = () => {
           artistName: raw.artist_name,
           audioUrl: raw.audio_url,
           coverArtUrl: raw.cover_art_url,
+          is_canvas: raw.is_canvas,
           upvotes: raw.upvotes || 0,
           status: raw.status,
           uploaderId: raw.uploader_id,
@@ -124,11 +125,19 @@ export const TheBox: React.FC = () => {
         <div className="group relative flex flex-col p-1.5 rounded-xl border border-green-500/20 bg-green-500/5 transition-all duration-700 overflow-hidden">
           <div className="relative h-16 rounded-lg overflow-hidden mb-1.5 border border-white/5">
             {nowPlaying ? (
-              <img
-                src={nowPlaying.coverArtUrl || `https://picsum.photos/seed/${nowPlaying.id}/100`}
-                className="w-full h-full object-cover grayscale opacity-50"
-                alt={nowPlaying.title}
-              />
+              nowPlaying.is_canvas && nowPlaying.coverArtUrl ? (
+                <video
+                  src={nowPlaying.coverArtUrl}
+                  className="w-full h-full object-cover grayscale opacity-50 pointer-events-none"
+                  autoPlay loop muted playsInline
+                />
+              ) : (
+                <img
+                  src={nowPlaying.coverArtUrl || `https://picsum.photos/seed/${nowPlaying.id}/100`}
+                  className="w-full h-full object-cover grayscale opacity-50"
+                  alt={nowPlaying.title}
+                />
+              )
             ) : (
               <div className="w-full h-full bg-zinc-900 flex items-center justify-center">
                 <div className="w-1 h-1 rounded-full bg-green-500 animate-ping" />
@@ -171,11 +180,19 @@ export const TheBox: React.FC = () => {
             >
               {/* Compact Thumbnail */}
               <div className="relative h-16 rounded-lg overflow-hidden mb-1.5 border border-white/5">
-                <img
-                  src={song.coverArtUrl || `https://picsum.photos/seed/${song.id}/100`}
-                  className={`w-full h-full object-cover transition-all duration-700 ${votedId && votedId !== song.id ? 'opacity-20 grayscale' : 'group-hover:scale-105'}`}
-                  alt={song.title}
-                />
+                {song.is_canvas && song.coverArtUrl ? (
+                  <video
+                    src={song.coverArtUrl}
+                    className={`w-full h-full object-cover transition-all duration-700 pointer-events-none ${votedId && votedId !== song.id ? 'opacity-20 grayscale' : 'group-hover:scale-105'}`}
+                    autoPlay loop muted playsInline
+                  />
+                ) : (
+                  <img
+                    src={song.coverArtUrl || `https://picsum.photos/seed/${song.id}/100`}
+                    className={`w-full h-full object-cover transition-all duration-700 ${votedId && votedId !== song.id ? 'opacity-20 grayscale' : 'group-hover:scale-105'}`}
+                    alt={song.title}
+                  />
+                )}
 
                 {/* Minimal Vote Badge */}
                 <div className={`absolute top-1 right-1 px-1.5 py-0.5 rounded-full flex items-center justify-center backdrop-blur-md border transition-all ${votedId === song.id

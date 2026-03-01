@@ -37,7 +37,7 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, onSignOut, profile }) 
           ) : (
             <>
               <img src={context.nowPlaying.coverArtUrl} className="absolute inset-0 w-full h-full object-cover opacity-30 blur-3xl scale-125" alt="" />
-              <img src={context.nowPlaying.coverArtUrl} className="z-20 w-3/4 max-w-md aspect-square object-cover shadow-[0_0_50px_rgba(0,0,0,0.8)] rounded-xl border border-white/10 animate-in zoom-in-95 fade-in duration-1000" alt="Album Cover" />
+              <img src={context.nowPlaying.coverArtUrl} className="z-20 w-11/12 max-w-2xl aspect-square object-cover opacity-80 shadow-[0_0_50px_rgba(0,0,0,0.8)] rounded-xl border border-white/10 animate-in zoom-in-95 fade-in duration-1000" alt="Album Cover" />
             </>
           )
         ) : (
