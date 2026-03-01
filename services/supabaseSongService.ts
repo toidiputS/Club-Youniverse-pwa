@@ -15,6 +15,9 @@ type DbSong = {
   audio_url: string;
   duration_sec: number;
   stars: number;
+  live_stars_sum: number;
+  live_stars_count: number;
+  is_dsw: boolean;
   box_rounds_seen: number;
   box_rounds_lost: number;
   box_appearance_count: number;
@@ -53,6 +56,9 @@ const mapDbSongToAppSong = (dbSong: DbSong): Song => {
     is_canvas: dbSong.is_canvas,
     durationSec: dbSong.duration_sec,
     stars: dbSong.stars,
+    liveStarsSum: dbSong.live_stars_sum,
+    liveStarsCount: dbSong.live_stars_count,
+    isDsw: dbSong.is_dsw,
     boxRoundsSeen: dbSong.box_rounds_seen,
     boxRoundsLost: dbSong.box_rounds_lost,
     boxAppearanceCount: dbSong.box_appearance_count,
@@ -122,6 +128,9 @@ export const addSongToDatabase = async (
     audio_url: songData.audioUrl,
     duration_sec: songData.durationSec,
     stars: songData.stars,
+    live_stars_sum: 0,
+    live_stars_count: 0,
+    is_dsw: false,
     box_rounds_seen: songData.boxRoundsSeen,
     box_rounds_lost: songData.boxRoundsLost,
     box_appearance_count: songData.boxAppearanceCount,

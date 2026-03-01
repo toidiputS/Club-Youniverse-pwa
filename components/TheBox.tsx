@@ -39,6 +39,9 @@ export const TheBox: React.FC = () => {
           source: raw.source,
           durationSec: raw.duration_sec,
           stars: raw.stars,
+          liveStarsSum: raw.live_stars_sum,
+          liveStarsCount: raw.live_stars_count,
+          isDsw: raw.is_dsw,
           boxRoundsSeen: raw.box_rounds_seen,
           boxRoundsLost: raw.box_rounds_lost,
           boxAppearanceCount: raw.box_appearance_count,
@@ -192,6 +195,12 @@ export const TheBox: React.FC = () => {
                     className={`w-full h-full object-cover transition-all duration-700 ${votedId && votedId !== song.id ? 'opacity-20 grayscale' : 'group-hover:scale-105'}`}
                     alt={song.title}
                   />
+                )}
+
+                {song.isDsw && (
+                  <div className="absolute top-0 left-0 px-1.5 py-0.5 rounded-br-lg bg-red-500 text-[6px] font-black text-white tracking-widest uppercase z-10 shadow-lg shadow-red-500/50 animate-pulse">
+                    Dead Song Walking
+                  </div>
                 )}
 
                 {/* Minimal Vote Badge */}

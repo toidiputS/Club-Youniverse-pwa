@@ -40,6 +40,9 @@ export interface Song {
   audioUrl: string;
   durationSec: number;
   stars: number;
+  liveStarsSum: number;
+  liveStarsCount: number;
+  isDsw: boolean;
   boxRoundsSeen: number;
   boxRoundsLost: number;
   boxAppearanceCount: number;

@@ -276,6 +276,21 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
     await fetchLibrary();
   };
 
+  const handleStarVote = async (stars: number) => {
+    if (!context.nowPlaying) return;
+    if (voteCooldowns[context.nowPlaying.id]) return;
+
+    setVoteCooldowns(prev => ({ ...prev, [context.nowPlaying!.id]: true }));
+
+    const { data: song } = await supabase.from("songs").select("live_stars_sum, live_stars_count").eq("id", context.nowPlaying.id).single();
+    if (song) {
+      await supabase.from("songs").update({
+        live_stars_sum: (song.live_stars_sum || 0) + stars,
+        live_stars_count: (song.live_stars_count || 0) + 1
+      }).eq("id", context.nowPlaying.id);
+    }
+  };
+
   const handleTtsSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canControl || !ttsInput.trim() || isSending) return;
@@ -646,239 +661,259 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
                       style={{ width: `${(context.currentTime / (context.nowPlaying.durationSec || 1)) * 100}%` }}
                     />
                   </div>
+                  <div className="flex items-center gap-1 mt-2 flex-wrap justify-end max-w-[200px]">
+                    <span className="text-[7px] font-black uppercase text-zinc-500 mr-2 w-full text-right block mb-1">Live Rating:</span>
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(star => (
+                      <button
+                        key={star}
+                        onClick={() => handleStarVote(star)}
+                        disabled={voteCooldowns[context.nowPlaying!.id]}
+                        className={`w-4 h-4 sm:w-5 sm:h-5 rounded flex items-center justify-center text-[8px] sm:text-[9px] font-black border transition-all ${voteCooldowns[context.nowPlaying!.id] ? 'border-zinc-800 text-zinc-700 bg-zinc-900 cursor-not-allowed' : 'border-yellow-500/30 text-yellow-500 hover:bg-yellow-500 hover:text-black hover:scale-110'}`}
+                      >
+                        {star}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
-
-            {/* BOX ANALYTICS LEADERBOARD */}
-            <div className="px-6 py-4 bg-black/20 border-b border-white/5 flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.4em]">Box Analytics</span>
-                  <div className="flex items-center gap-1.5 bg-purple-500/10 px-2 py-0.5 rounded-full border border-purple-500/20">
-                    <span className="text-[7px] font-black uppercase text-purple-400">Live Leaderboard</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-1">
-                    <span className="text-[8px] font-black text-zinc-700 uppercase">Pool:</span>
-                    <span className="text-[10px] font-black text-zinc-500">{songs.filter(s => s.status === 'pool').length}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-[8px] font-black text-zinc-700 uppercase">In Box:</span>
-                    <span className="text-[10px] font-black text-purple-400">{songs.filter(s => s.status === 'in_box').length}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {songs.filter(s => s.status === 'in_box').sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0)).map((song, i) => {
-                  const totalVotes = songs.filter(s => s.status === 'in_box').reduce((acc, curr) => acc + (curr.upvotes || 0), 0) || 1;
-                  const percentage = Math.round(((song.upvotes || 0) / totalVotes) * 100);
-
-                  return (
-                    <div key={song.id} className={`p-3 rounded-xl border ${i === 0 ? 'border-purple-500/30 bg-purple-500/5' : 'border-white/5 bg-white/5'} transition-all`}>
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex flex-col min-w-0">
-                          <span className="text-[9px] font-black text-white truncate uppercase">{song.title}</span>
-                          <span className="text-[7px] font-bold text-zinc-500 truncate uppercase mt-0.5">{song.artist_name}</span>
-                        </div>
-                        <div className="flex flex-col items-end flex-shrink-0">
-                          <div className="flex items-center gap-1">
-                            <span className={`text-[11px] font-black ${i === 0 ? 'text-purple-400' : 'text-zinc-500'}`}>{song.upvotes || 0}</span>
-                            <span className="text-[7px] font-bold text-zinc-700 uppercase mt-0.5">Votes</span>
-                          </div>
-                          {i === 0 && <span className="text-[6px] font-black text-purple-600 uppercase tracking-tighter">Winning</span>}
-                        </div>
-                      </div>
-                      <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full ${i === 0 ? 'bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]' : 'bg-zinc-600'} transition-all duration-1000`}
-                          style={{ width: `${percentage}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-                {songs.filter(s => s.status === 'in_box').length === 0 && (
-                  <div className="col-span-2 py-4 flex flex-center justify-center border border-dashed border-white/5 rounded-xl">
-                    <span className="text-[8px] font-black uppercase text-zinc-500 tracking-widest opacity-20">The Box is currently empty. Add songs to start a round.</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex-grow overflow-y-auto px-4 py-2 divide-y divide-white/[0.02] min-h-[300px] md:min-h-[200px]">
-              {filteredSongs.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center opacity-20 py-20">
-                  <div className="w-12 h-12 border-2 border-dashed border-white/20 rounded-full animate-spin mb-4" />
-                  <span className="text-[10px] uppercase font-black tracking-widest text-white">Scanning for nodes...</span>
-                </div>
-              ) : (
-                filteredSongs.map(song => (
-                  <div key={song.id} className="py-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between group hover:bg-white/[0.02] -mx-4 px-4 transition-all gap-2 sm:gap-4">
-                    <div className="w-full sm:w-auto min-w-0 flex-grow flex items-center gap-4">
-                      <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-white/5 flex-shrink-0 overflow-hidden relative">
-                        {song.is_canvas && song.cover_art_url ? (
-                          <video src={song.cover_art_url} muted loop playsInline autoPlay className="w-full h-full object-cover grayscale opacity-50 group-hover:grayscale-0 group-hover:opacity-100 transition-all pointer-events-none" />
-                        ) : (
-                          <img src={song.cover_art_url || `https://picsum.photos/seed/${song.id}/100`} className="w-full h-full object-cover grayscale opacity-50 group-hover:grayscale-0 group-hover:opacity-100 transition-all" alt="" />
-                        )}
-                      </div>
-                      <div className="flex-grow min-w-0 overflow-hidden">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="text-[10px] font-black text-white/50 group-hover:text-white truncate uppercase transition-colors max-w-full">{song.title}</h4>
-                          {(song.status === 'in_box' || song.status === 'pool') && (song.upvotes > 0 || song.status === 'in_box') && (
-                            <span className={`text-[7px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter shrink-0 flex items-center gap-1 ${song.status === 'in_box' ? 'bg-purple-500/20 text-purple-400' : 'bg-zinc-800 text-zinc-400'}`}>
-                              🗳️ {song.upvotes || 0} Votes
-                            </span>
-                          )}
-                          {song.status === 'now_playing' && (
-                            <span className="text-[7px] font-black bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded uppercase tracking-tighter shrink-0">📡 Active</span>
-                          )}
-                        </div>
-                        <span className="text-[8px] font-bold text-zinc-700 uppercase tracking-tight group-hover:text-purple-400/50 transition-colors truncate block max-w-full">{song.artist_name}</span>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-1 md:gap-2 flex-shrink-0 w-full sm:w-auto pl-12 sm:pl-0">
-                      <button
-                        onClick={() => handleVote(song.id, song.upvotes)}
-                        disabled={voteCooldowns[song.id] || song.status === 'now_playing'}
-                        className={`text-[7px] font-black border px-3 py-1.5 sm:px-2 sm:py-1 rounded transition-all uppercase flex-grow sm:flex-none text-center ${voteCooldowns[song.id] ? 'border-zinc-800 text-zinc-600 cursor-not-allowed' : 'border-purple-500/30 text-purple-400 hover:text-white hover:bg-purple-500/20'}`}
-                      >
-                        VOTE
-                      </button>
-                      <button
-                        onClick={() => context.downloadSong(PersistentRadioService.mapDbToApp(song))}
-                        className="text-[7px] font-black border border-white/5 px-3 py-1.5 sm:px-2 sm:py-1 rounded text-zinc-600 hover:text-white hover:bg-white/5 transition-all uppercase flex-grow sm:flex-none text-center"
-                      >
-                        DL
-                      </button>
-                      {canControl && (
-                        <>
-                          {isAdmin && (
-                            <button
-                              onClick={() => handleDelete(song.id)}
-                              className="text-[7px] font-black border border-red-500/20 px-3 py-1.5 sm:px-2 sm:py-1 rounded text-red-500 hover:text-white hover:bg-red-600 transition-all uppercase flex-grow sm:flex-none text-center"
-                            >
-                              DEL
-                            </button>
-                          )}
-                          <button
-                            onClick={() => pushToNow(song)}
-                            className="text-[7px] font-black border border-purple-500/20 px-3 py-1.5 sm:px-2 sm:py-1 rounded text-purple-400 hover:text-white hover:bg-purple-600 transition-all uppercase flex-grow sm:flex-none text-center"
-                          >
-                            {song.status === 'now_playing' ? 'Restart' : 'Play'}
-                          </button>
-                          <button
-                            onClick={() => pushToBox(song.id, song.status === 'in_box' ? 'pool' : 'in_box')}
-                            className={`text-[7px] font-black border px-3 py-1.5 sm:px-2 sm:py-1 rounded uppercase transition-all flex-grow sm:flex-none text-center ${song.status === 'in_box' ? 'border-purple-500/50 text-purple-400 bg-purple-500/10' : 'border-white/10 text-zinc-500 hover:text-white hover:border-white/30'}`}
-                          >
-                            {song.status === 'in_box' ? 'Boxed' : 'Box'}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div >
-
-          {/* TRANSMITTER PAD (High Density) */}
-          < div className="md:h-44 bg-zinc-950/80 border border-white/10 rounded-2xl p-4 flex flex-col md:flex-row gap-4 mb-4 md:mb-0" >
-            <div className="w-full md:w-48 bg-black/40 rounded-xl border border-white/5 p-3 flex flex-col justify-between hidden md:flex">
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-[7px] font-black text-zinc-700 uppercase">Return Feed</span>
-                <div className="flex items-center gap-1">
-                  <div className="w-1 h-1 rounded-full bg-green-500 animate-pulse" />
-                  <span className="text-[6px] font-black text-green-500/50 uppercase">Active</span>
-                </div>
-              </div>
-              <OnAirMonitor />
-            </div>
-
-            <div className="flex-grow flex flex-col">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Narrator Payload</span>
-                <div className="flex gap-2 text-[7px] font-black text-zinc-800 uppercase">
-                  <span>Lat: --</span>
-                  <span>Lon: --</span>
-                </div>
-              </div>
-              <textarea
-                value={ttsInput}
-                onChange={e => setTtsInput(e.target.value)}
-                placeholder="Type protocol command..."
-                className="flex-grow min-h-[60px] md:min-h-0 bg-black/40 border border-white/5 rounded-xl p-3 text-[11px] text-white/80 placeholder-zinc-800 focus:outline-none focus:border-purple-500/20 transition-all font-mono resize-none"
-              />
-            </div>
-            <div className="w-full md:w-48 flex flex-col gap-2">
-              <div className="p-2 border border-white/5 rounded-lg bg-black/40 hidden md:block">
-                <span className="text-[7px] font-black text-zinc-700 uppercase block mb-1">Vocoder Model</span>
-                <span className="text-[9px] font-black uppercase text-purple-400">Fenrir.v4</span>
-              </div>
-              <button
-                onClick={handleTtsSend}
-                disabled={isSending || !ttsInput.trim()}
-                className="w-full py-3 md:py-0 md:flex-grow bg-white text-black text-[10px] font-black uppercase tracking-widest hover:invert transition-all flex items-center justify-center rounded-xl"
-              >
-                {isSending ? 'Sending...' : 'Transmit Payload'}
-              </button>
-            </div>
-          </div >
-        </div >
-
-        {/* RIGHT DECK: ARCHIVE & PULSE SIDEBAR */}
-        < div className="w-full md:w-80 border-t md:border-t-0 md:border-l border-white/5 bg-zinc-950/40 backdrop-blur-md flex flex-col shrink-0 md:overflow-hidden h-[500px] md:h-auto" >
-          <div className="flex-grow min-h-0">
-            <TheChat profile={profile} />
           </div>
 
-          {/* PULSE MONITOR / FX PAD moved here */}
-          <div className="md:h-64 border-t border-white/5 bg-black/40 p-4 shrink-0">
-            <span className="text-[8px] font-black text-zinc-700 uppercase tracking-[0.4em] mb-4 block">Pulse Monitor</span>
-            <div className="flex-grow flex items-center justify-center relative border border-white/5 rounded-xl bg-zinc-950/20 overflow-hidden mb-4 h-24">
-              <div className="absolute inset-0 grid grid-cols-6 grid-rows-6 opacity-[0.03] pointer-events-none">
-                {Array.from({ length: 36 }).map((_, i) => <div key={i} className="border border-white" />)}
+          {/* BOX ANALYTICS LEADERBOARD */}
+          <div className="px-6 py-4 bg-black/20 border-b border-white/5 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.4em]">Box Analytics</span>
+                <div className="flex items-center gap-1.5 bg-purple-500/10 px-2 py-0.5 rounded-full border border-purple-500/20">
+                  <span className="text-[7px] font-black uppercase text-purple-400">Live Leaderboard</span>
+                </div>
               </div>
-              <div className="z-10 grid grid-cols-5 md:grid-cols-5 gap-1 md:gap-2 w-full px-2">
-                {["Confetti", "Glitch", "Shake", "Pulse", "Static", "Invert", "Hue", "Blur", "Pixel", "Neon"].map(fx => (
-                  <button
-                    key={fx}
-                    onClick={() => sendSiteCommand("trigger_fx", { fx })}
-                    disabled={!canControl}
-                    className={`px-1 py-1.5 bg-transparent border rounded text-[6px] font-black uppercase transition-all ${canControl
-                      ? 'border-white/5 hover:border-purple-500/50 hover:bg-white/5 hover:text-white'
-                      : 'border-white/5 opacity-30 cursor-not-allowed text-zinc-600'
-                      }`}
-                  >
-                    {fx.slice(0, 3)}
-                  </button>
-                ))}
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-1">
+                  <span className="text-[8px] font-black text-zinc-700 uppercase">Pool:</span>
+                  <span className="text-[10px] font-black text-zinc-500">{songs.filter(s => s.status === 'pool').length}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-[8px] font-black text-zinc-700 uppercase">In Box:</span>
+                  <span className="text-[10px] font-black text-purple-400">{songs.filter(s => s.status === 'in_box').length}</span>
+                </div>
               </div>
             </div>
 
-            {/* ORPHAN RECOVERY UI - ADMIN ONLY */}
-            {isAdmin && orphans.length > 0 && (
-              <div className="mb-4 p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl animate-pulse">
-                <span className="text-[8px] font-black text-purple-400 uppercase block mb-1 tracking-[0.2em]">🚨 Dead Nodes</span>
-                <button
-                  onClick={recoverSongs}
-                  disabled={isUploading}
-                  className="w-full py-1.5 bg-purple-600 text-white text-[8px] font-black uppercase tracking-widest rounded-lg hover:bg-purple-500 transition-all"
-                >
-                  {isUploading ? 'Resurrecting...' : 'Resurrect All'}
-                </button>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {songs.filter(s => s.status === 'in_box').sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0)).map((song, i) => {
+                const totalVotes = songs.filter(s => s.status === 'in_box').reduce((acc, curr) => acc + (curr.upvotes || 0), 0) || 1;
+                const percentage = Math.round(((song.upvotes || 0) / totalVotes) * 100);
+
+                return (
+                  <div key={song.id} className={`p-3 rounded-xl border ${i === 0 ? 'border-purple-500/30 bg-purple-500/5' : 'border-white/5 bg-white/5'} transition-all`}>
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-[9px] font-black text-white truncate uppercase">{song.title}</span>
+                        <span className="text-[7px] font-bold text-zinc-500 truncate uppercase mt-0.5">{song.artist_name}</span>
+                      </div>
+                      <div className="flex flex-col items-end flex-shrink-0">
+                        <div className="flex items-center gap-1">
+                          <span className={`text-[11px] font-black ${i === 0 ? 'text-purple-400' : 'text-zinc-500'}`}>{song.upvotes || 0}</span>
+                          <span className="text-[7px] font-bold text-zinc-700 uppercase mt-0.5">Votes</span>
+                        </div>
+                        {i === 0 && <span className="text-[6px] font-black text-purple-600 uppercase tracking-tighter">Winning</span>}
+                      </div>
+                    </div>
+                    <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${i === 0 ? 'bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]' : 'bg-zinc-600'} transition-all duration-1000`}
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+              {songs.filter(s => s.status === 'in_box').length === 0 && (
+                <div className="col-span-2 py-4 flex flex-center justify-center border border-dashed border-white/5 rounded-xl">
+                  <span className="text-[8px] font-black uppercase text-zinc-500 tracking-widest opacity-20">The Box is currently empty. Add songs to start a round.</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex-grow overflow-y-auto px-4 py-2 divide-y divide-white/[0.02] min-h-[300px] md:min-h-[200px]">
+            {filteredSongs.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center opacity-20 py-20">
+                <div className="w-12 h-12 border-2 border-dashed border-white/20 rounded-full animate-spin mb-4" />
+                <span className="text-[10px] uppercase font-black tracking-widest text-white">Scanning for nodes...</span>
               </div>
+            ) : (
+              filteredSongs.map(song => (
+                <div key={song.id} className="py-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between group hover:bg-white/[0.02] -mx-4 px-4 transition-all gap-2 sm:gap-4">
+                  <div className="w-full sm:w-auto min-w-0 flex-grow flex items-center gap-4">
+                    <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-white/5 flex-shrink-0 overflow-hidden relative">
+                      {song.is_canvas && song.cover_art_url ? (
+                        <video src={song.cover_art_url} muted loop playsInline autoPlay className="w-full h-full object-cover grayscale opacity-50 group-hover:grayscale-0 group-hover:opacity-100 transition-all pointer-events-none" />
+                      ) : (
+                        <img src={song.cover_art_url || `https://picsum.photos/seed/${song.id}/100`} className="w-full h-full object-cover grayscale opacity-50 group-hover:grayscale-0 group-hover:opacity-100 transition-all" alt="" />
+                      )}
+                    </div>
+                    <div className="flex-grow min-w-0 overflow-hidden">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-[10px] font-black text-white/50 group-hover:text-white truncate uppercase transition-colors max-w-full">{song.title}</h4>
+                        {(song.status === 'in_box' || song.status === 'pool') && (song.upvotes > 0 || song.status === 'in_box') && (
+                          <span className={`text-[7px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter shrink-0 flex items-center gap-1 ${song.status === 'in_box' ? 'bg-purple-500/20 text-purple-400' : 'bg-zinc-800 text-zinc-400'}`}>
+                            🗳️ {song.upvotes || 0} Votes
+                          </span>
+                        )}
+                        {song.status === 'now_playing' && (
+                          <span className="text-[7px] font-black bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded uppercase tracking-tighter shrink-0">📡 Active</span>
+                        )}
+                      </div>
+                      <span className="text-[8px] font-bold text-zinc-700 uppercase tracking-tight group-hover:text-purple-400/50 transition-colors truncate block max-w-full">{song.artist_name}</span>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[8px] font-black text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded border border-yellow-500/20">★ {song.stars}/10</span>
+                        {song.is_dsw && (
+                          <span className="text-[7px] font-black bg-red-500/20 text-red-500 px-1.5 py-0.5 rounded uppercase tracking-tighter border border-red-500/30 animate-pulse">
+                            DEAD SONG WALKING
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1 md:gap-2 flex-shrink-0 w-full sm:w-auto pl-12 sm:pl-0">
+                    <button
+                      onClick={() => handleVote(song.id, song.upvotes)}
+                      disabled={voteCooldowns[song.id] || song.status === 'now_playing'}
+                      className={`text-[7px] font-black border px-3 py-1.5 sm:px-2 sm:py-1 rounded transition-all uppercase flex-grow sm:flex-none text-center ${voteCooldowns[song.id] ? 'border-zinc-800 text-zinc-600 cursor-not-allowed' : 'border-purple-500/30 text-purple-400 hover:text-white hover:bg-purple-500/20'}`}
+                    >
+                      VOTE
+                    </button>
+                    <button
+                      onClick={() => context.downloadSong(PersistentRadioService.mapDbToApp(song))}
+                      className="text-[7px] font-black border border-white/5 px-3 py-1.5 sm:px-2 sm:py-1 rounded text-zinc-600 hover:text-white hover:bg-white/5 transition-all uppercase flex-grow sm:flex-none text-center"
+                    >
+                      DL
+                    </button>
+                    {canControl && (
+                      <>
+                        {isAdmin && (
+                          <button
+                            onClick={() => handleDelete(song.id)}
+                            className="text-[7px] font-black border border-red-500/20 px-3 py-1.5 sm:px-2 sm:py-1 rounded text-red-500 hover:text-white hover:bg-red-600 transition-all uppercase flex-grow sm:flex-none text-center"
+                          >
+                            DEL
+                          </button>
+                        )}
+                        <button
+                          onClick={() => pushToNow(song)}
+                          className="text-[7px] font-black border border-purple-500/20 px-3 py-1.5 sm:px-2 sm:py-1 rounded text-purple-400 hover:text-white hover:bg-purple-600 transition-all uppercase flex-grow sm:flex-none text-center"
+                        >
+                          {song.status === 'now_playing' ? 'Restart' : 'Play'}
+                        </button>
+                        <button
+                          onClick={() => pushToBox(song.id, song.status === 'in_box' ? 'pool' : 'in_box')}
+                          className={`text-[7px] font-black border px-3 py-1.5 sm:px-2 sm:py-1 rounded uppercase transition-all flex-grow sm:flex-none text-center ${song.status === 'in_box' ? 'border-purple-500/50 text-purple-400 bg-purple-500/10' : 'border-white/10 text-zinc-500 hover:text-white hover:border-white/30'}`}
+                        >
+                          {song.status === 'in_box' ? 'Boxed' : 'Box'}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))
             )}
           </div>
         </div >
 
+        {/* TRANSMITTER PAD (High Density) */}
+        < div className="md:h-44 bg-zinc-950/80 border border-white/10 rounded-2xl p-4 flex flex-col md:flex-row gap-4 mb-4 md:mb-0" >
+          <div className="w-full md:w-48 bg-black/40 rounded-xl border border-white/5 p-3 flex flex-col justify-between hidden md:flex">
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-[7px] font-black text-zinc-700 uppercase">Return Feed</span>
+              <div className="flex items-center gap-1">
+                <div className="w-1 h-1 rounded-full bg-green-500 animate-pulse" />
+                <span className="text-[6px] font-black text-green-500/50 uppercase">Active</span>
+              </div>
+            </div>
+            <OnAirMonitor />
+          </div>
+
+          <div className="flex-grow flex flex-col">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Narrator Payload</span>
+              <div className="flex gap-2 text-[7px] font-black text-zinc-800 uppercase">
+                <span>Lat: --</span>
+                <span>Lon: --</span>
+              </div>
+            </div>
+            <textarea
+              value={ttsInput}
+              onChange={e => setTtsInput(e.target.value)}
+              placeholder="Type protocol command..."
+              className="flex-grow min-h-[60px] md:min-h-0 bg-black/40 border border-white/5 rounded-xl p-3 text-[11px] text-white/80 placeholder-zinc-800 focus:outline-none focus:border-purple-500/20 transition-all font-mono resize-none"
+            />
+          </div>
+          <div className="w-full md:w-48 flex flex-col gap-2">
+            <div className="p-2 border border-white/5 rounded-lg bg-black/40 hidden md:block">
+              <span className="text-[7px] font-black text-zinc-700 uppercase block mb-1">Vocoder Model</span>
+              <span className="text-[9px] font-black uppercase text-purple-400">Fenrir.v4</span>
+            </div>
+            <button
+              onClick={handleTtsSend}
+              disabled={isSending || !ttsInput.trim()}
+              className="w-full py-3 md:py-0 md:flex-grow bg-white text-black text-[10px] font-black uppercase tracking-widest hover:invert transition-all flex items-center justify-center rounded-xl"
+            >
+              {isSending ? 'Sending...' : 'Transmit Payload'}
+            </button>
+          </div>
+        </div >
+      </div >
+
+      {/* RIGHT DECK: ARCHIVE & PULSE SIDEBAR */}
+      < div className="w-full md:w-80 border-t md:border-t-0 md:border-l border-white/5 bg-zinc-950/40 backdrop-blur-md flex flex-col shrink-0 md:overflow-hidden h-[500px] md:h-auto" >
+        <div className="flex-grow min-h-0">
+          <TheChat profile={profile} />
+        </div>
+
+        {/* PULSE MONITOR / FX PAD moved here */}
+        <div className="md:h-64 border-t border-white/5 bg-black/40 p-4 shrink-0">
+          <span className="text-[8px] font-black text-zinc-700 uppercase tracking-[0.4em] mb-4 block">Pulse Monitor</span>
+          <div className="flex-grow flex items-center justify-center relative border border-white/5 rounded-xl bg-zinc-950/20 overflow-hidden mb-4 h-24">
+            <div className="absolute inset-0 grid grid-cols-6 grid-rows-6 opacity-[0.03] pointer-events-none">
+              {Array.from({ length: 36 }).map((_, i) => <div key={i} className="border border-white" />)}
+            </div>
+            <div className="z-10 grid grid-cols-5 md:grid-cols-5 gap-1 md:gap-2 w-full px-2">
+              {["Confetti", "Glitch", "Shake", "Pulse", "Static", "Invert", "Hue", "Blur", "Pixel", "Neon"].map(fx => (
+                <button
+                  key={fx}
+                  onClick={() => sendSiteCommand("trigger_fx", { fx })}
+                  disabled={!canControl}
+                  className={`px-1 py-1.5 bg-transparent border rounded text-[6px] font-black uppercase transition-all ${canControl
+                    ? 'border-white/5 hover:border-purple-500/50 hover:bg-white/5 hover:text-white'
+                    : 'border-white/5 opacity-30 cursor-not-allowed text-zinc-600'
+                    }`}
+                >
+                  {fx.slice(0, 3)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ORPHAN RECOVERY UI - ADMIN ONLY */}
+          {isAdmin && orphans.length > 0 && (
+            <div className="mb-4 p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl animate-pulse">
+              <span className="text-[8px] font-black text-purple-400 uppercase block mb-1 tracking-[0.2em]">🚨 Dead Nodes</span>
+              <button
+                onClick={recoverSongs}
+                disabled={isUploading}
+                className="w-full py-1.5 bg-purple-600 text-white text-[8px] font-black uppercase tracking-widest rounded-lg hover:bg-purple-500 transition-all"
+              >
+                {isUploading ? 'Resurrecting...' : 'Resurrect All'}
+              </button>
+            </div>
+          )}
+        </div>
       </div >
 
       {/* 4. DENSE GRID OVERLAY SIDES */}
-      < div className="absolute inset-0 z-40 border-[20px] border-white/0 pointer-events-none border-l-white/[0.01] border-r-white/[0.01]" />
-    </div >
+      <div className="absolute inset-0 z-40 border-[20px] border-white/0 pointer-events-none border-l-white/[0.01] border-r-white/[0.01]" />
+    </div>
   );
 };

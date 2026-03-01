@@ -110,10 +110,13 @@ export class PersistentRadioService {
             }
 
             // Process Winner
+            let winnerStars = Math.min(10, (winner.stars || 5) + 1);
+            let winnerDsw = winner.is_dsw;
+
             await supabase
                 .from("songs")
                 .update({
-                    stars: Math.min(10, (winner.stars || 5) + 1),
+                    stars: winnerDsw ? 0 : winnerStars,
                     status: "next_play", // Move to next_play so the broadcast manager can pick it up
                     upvotes: 0 // Reset votes for next time
                 })
@@ -122,10 +125,16 @@ export class PersistentRadioService {
             // Process Losers
             for (const loser of losers) {
                 console.log(`💀 Loser: ${loser.title} returning to pool.`);
+                let loserStars = Math.max(0, (loser.stars || 5) - 1);
+                let loserDsw = loser.is_dsw || (loserStars <= 0); // Becomes DSW if it hits 0
+                loserStars = loserDsw ? 0 : loserStars;
+
                 await supabase
                     .from("songs")
                     .update({
                         status: "pool",
+                        stars: loserStars,
+                        is_dsw: loserDsw,
                         upvotes: 0
                     })
                     .eq("id", loser.id);
@@ -236,6 +245,50 @@ export class PersistentRadioService {
     }
 
     static async cycleNextToNow(): Promise<Song | null> {
+        // 1. Fetch current now_playing to calculate stars and retire it
+        const { data: currentPlaying } = await supabase
+            .from("songs")
+            .select("*")
+            .eq("status", "now_playing")
+            .limit(1);
+
+        const currSong = currentPlaying && currentPlaying.length > 0 ? currentPlaying[0] : null;
+
+        if (currSong) {
+            let newStars = currSong.stars;
+            let nextStatus = "pool";
+            let isDsw = currSong.is_dsw;
+
+            if (currSong.is_dsw) {
+                // It was a Dead Song Walking. This was its farewell play.
+                console.log(`🪦 Farewell, ${currSong.title}. Sending to Graveyard.`);
+                nextStatus = "graveyard";
+            } else {
+                if (currSong.live_stars_count > 0) {
+                    const delta = Math.round(currSong.live_stars_sum - (currSong.live_stars_count * currSong.stars));
+                    newStars = Math.min(10, Math.max(0, currSong.stars + delta));
+                    console.log(`⭐ Live Rating Math for ${currSong.title}: Old Stars: ${currSong.stars}, Delta: ${delta}, New Stars: ${newStars}`);
+                }
+                if (newStars <= 0) {
+                    isDsw = true;
+                    newStars = 0; // Lock at 0
+                    console.log(`🧟 ${currSong.title} has become a Dead Song Walking.`);
+                }
+            }
+
+            // Retire it
+            await supabase
+                .from("songs")
+                .update({
+                    status: nextStatus,
+                    stars: newStars,
+                    is_dsw: isDsw,
+                    live_stars_sum: 0,
+                    live_stars_count: 0
+                })
+                .eq("id", currSong.id);
+        }
+
         const { data: nextUp } = await supabase
             .from("songs")
             .select("*")
@@ -295,6 +348,9 @@ export class PersistentRadioService {
             coverArtUrl: dbSong.cover_art_url,
             durationSec: dbSong.duration_sec,
             stars: dbSong.stars,
+            liveStarsSum: dbSong.live_stars_sum,
+            liveStarsCount: dbSong.live_stars_count,
+            isDsw: dbSong.is_dsw,
             boxRoundsSeen: dbSong.box_rounds_seen,
             boxRoundsLost: dbSong.box_rounds_lost,
             boxAppearanceCount: dbSong.box_appearance_count,
