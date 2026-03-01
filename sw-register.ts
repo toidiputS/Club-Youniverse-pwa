@@ -9,16 +9,17 @@ export const registerServiceWorker = () => {
   if ("serviceWorker" in navigator) {
     const updateSW = registerSW({
       onNeedRefresh() {
-        if (confirm("New version available! Refresh to update?")) {
-          updateSW(true);
-        }
+        console.log("New version available, triggering custom UI event...");
+        window.dispatchEvent(new CustomEvent('pwa-update-available', { detail: { updateSW } }));
       },
       onOfflineReady() {
         console.log("Ready to work offline!");
       },
     });
+    return updateSW;
   } else {
     console.warn("⚠️ Service Workers not supported in this browser");
+    return null;
   }
 };
 

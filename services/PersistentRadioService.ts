@@ -27,18 +27,21 @@ export class PersistentRadioService {
             .eq("id", "00000000-0000-0000-0000-000000000000")
             .single();
 
-        // 3. If nothing is playing in memory or DB, kickstart
-        if (!nowPlaying || !broadcast?.song_started_at) {
-            console.log("🛠️ Watchdog: No song playing. Attempting kickstart...");
+        // 3. If nothing is playing in DB, kickstart
+        if (!broadcast?.song_started_at) {
+            console.log("🛠️ Watchdog: No song playing in DB. Attempting kickstart...");
             return await this.cycleNextToNow();
         }
 
         // 4. "ZOMBIE PREVENTION": If current song should be finished by now, force transition
-        if (nowPlaying.durationSec) {
+        if (nowPlaying && nowPlaying.durationSec) {
             const startedAt = new Date(broadcast.song_started_at).getTime();
             const now = Date.now();
             const elapsed = (now - startedAt) / 1000;
-            const margin = 30; // 30 second safety margin (accounts for clock drift or buffering pauses)
+
+            // Legacy uploads were all hardcoded to 180s. Give them a huge margin to avoid cutting them off early.
+            // Otherwise, standard 30s margin for clock drift or buffering pauses.
+            const margin = nowPlaying.durationSec === 180 ? 900 : 30;
 
             if (elapsed > nowPlaying.durationSec + margin) {
                 console.log(`🧟 Watchdog: Zombie detected! (${elapsed.toFixed(1)}s elapsed for ${nowPlaying.durationSec}s song). Force transitioning...`);

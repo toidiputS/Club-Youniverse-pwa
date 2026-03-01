@@ -289,6 +289,21 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
     setIsSending(false);
   };
 
+  const getAudioDuration = (file: File): Promise<number> => {
+    return new Promise((resolve) => {
+      const objectUrl = URL.createObjectURL(file);
+      const audio = new Audio(objectUrl);
+      audio.addEventListener('loadedmetadata', () => {
+        resolve(Math.round(audio.duration));
+        URL.revokeObjectURL(objectUrl);
+      });
+      audio.addEventListener('error', () => {
+        resolve(180); // fallback
+        URL.revokeObjectURL(objectUrl);
+      });
+    });
+  };
+
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     // Removed isAdmin restriction so Yousers can upload
     const file = e.target.files?.[0];
@@ -299,7 +314,7 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
     setUploadProgress(10);
 
     try {
-      const duration = 180;
+      const duration = await getAudioDuration(file);
       const fileExt = file.name.split('.').pop();
       const cleanName = file.name.replace(`.${fileExt}`, "").replace(/[^a-zA-Z0-9]/g, "_");
       const fileName = `${Date.now()}_${cleanName}.${fileExt}`;
@@ -441,33 +456,9 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
 
         {/* LEFT DECK: PROTOCOL TRIGGERS */}
         <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-white/5 bg-zinc-950/40 backdrop-blur-md flex flex-col p-4 flex-shrink-0">
-          <span className="text-[8px] font-black text-zinc-700 uppercase tracking-[0.5em] mb-4 block">System Triggers</span>
-          <div className="grid grid-cols-1 gap-px bg-white/5 border border-white/5 rounded-lg overflow-hidden">
-            {[
-              { id: 'POOL', icon: 'P', label: 'Cycle' },
-              { id: 'THE_BOX', icon: 'B', label: 'Refresh Box' },
-              { id: 'DJ_TALKING', icon: 'M', label: 'Mic Over' },
-              { id: 'BOX_WIN', icon: 'W', label: 'Force Win' },
-              { id: 'REBOOT', icon: 'N', label: 'Force Nuke', color: 'text-red-500' }
-            ].map(btn => (
-              <button
-                key={btn.id}
-                onClick={() => forceNextState(btn.id)}
-                disabled={!isCurrentDJ}
-                className={`flex items-center justify-between px-4 py-3 transition-all group ${btn.id === radioState ? 'bg-purple-950/20' : 'bg-zinc-950 hover:bg-zinc-900'
-                  } ${!isCurrentDJ ? 'opacity-30 cursor-not-allowed filter grayscale' : ''}`}
-              >
-                <div className="flex items-center gap-3">
-                  <span className={`text-[10px] font-black border border-white/10 w-5 h-5 flex items-center justify-center rounded ${btn.id === radioState ? 'border-purple-500/50 text-purple-400' : 'text-zinc-600'}`}>{btn.icon}</span>
-                  <span className={`text-[9px] font-black uppercase tracking-widest ${btn.color || 'text-zinc-400 group-hover:text-white'}`}>{btn.label}</span>
-                </div>
-                {btn.id === radioState && <div className="w-1 h-1 rounded-full bg-purple-500 animate-pulse shadow-[0_0_5px_purple]" />}
-              </button>
-            ))}
-          </div>
 
           {/* SQUAD / YOUSER DJ REVIEW BOX */}
-          <div className="flex-grow my-4 border border-yellow-500/30 bg-yellow-500/5 rounded-lg p-3 flex flex-col min-h-[150px] md:min-h-0 md:max-h-[300px]">
+          <div className="flex-grow mb-4 border border-yellow-500/30 bg-yellow-500/5 rounded-lg p-3 flex flex-col min-h-[150px] md:min-h-0 md:max-h-[300px]">
             <span className="text-[8px] font-bold text-yellow-500 uppercase block mb-2 tracking-widest leading-tight">Youser Intake</span>
             <div className="flex-grow divide-y divide-white/5 overflow-y-auto pr-1 flex flex-col gap-2">
               {songs.filter(s => s.status === 'review').map(song => (
@@ -495,7 +486,7 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
             </div>
           </div>
 
-          <div className="mt-auto pt-4 space-y-4">
+          <div className="space-y-4 mb-4">
             <div className="p-3 bg-zinc-900/40 rounded-lg border border-white/5">
               <span className="text-[8px] font-bold text-zinc-600 uppercase block mb-2 tracking-widest">Suno Deployment</span>
               <label className="flex items-center gap-2 cursor-pointer mb-3 opacity-60 hover:opacity-100 transition-opacity">
@@ -508,12 +499,39 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
               </label>
             </div>
           </div>
+
+          <div className="mt-auto">
+            <span className="text-[8px] font-black text-zinc-700 uppercase tracking-[0.5em] mb-4 block">System Triggers</span>
+            <div className="grid grid-cols-1 gap-px bg-white/5 border border-white/5 rounded-lg overflow-hidden">
+              {[
+                { id: 'POOL', icon: 'P', label: 'Cycle' },
+                { id: 'THE_BOX', icon: 'B', label: 'Refresh Box' },
+                { id: 'DJ_TALKING', icon: 'M', label: 'Mic Over' },
+                { id: 'BOX_WIN', icon: 'W', label: 'Force Win' },
+                { id: 'REBOOT', icon: 'N', label: 'Force Nuke', color: 'text-red-500' }
+              ].map(btn => (
+                <button
+                  key={btn.id}
+                  onClick={() => forceNextState(btn.id)}
+                  disabled={!isCurrentDJ}
+                  className={`flex items-center justify-between px-4 py-3 transition-all group ${btn.id === radioState ? 'bg-purple-950/20' : 'bg-zinc-950 hover:bg-zinc-900'
+                    } ${!isCurrentDJ ? 'opacity-30 cursor-not-allowed filter grayscale' : ''}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className={`text-[10px] font-black border border-white/10 w-5 h-5 flex items-center justify-center rounded ${btn.id === radioState ? 'border-purple-500/50 text-purple-400' : 'text-zinc-600'}`}>{btn.icon}</span>
+                    <span className={`text-[9px] font-black uppercase tracking-widest ${btn.color || 'text-zinc-400 group-hover:text-white'}`}>{btn.label}</span>
+                  </div>
+                  {btn.id === radioState && <div className="w-1 h-1 rounded-full bg-purple-500 animate-pulse shadow-[0_0_5px_purple]" />}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* CENTER DECK: THE MONITOR & TRANSMITTER */}
         <div className="flex-grow flex flex-col p-4 gap-4 overflow-visible md:overflow-hidden relative shrink-0 md:shrink">
           {/* Visualizer/Monitor Grid moved to smaller side slot or kept as background */}
-          <div className="flex-grow flex flex-col min-h-[500px] md:min-h-0 bg-zinc-950/40 backdrop-blur-md border border-white/5 rounded-2xl overflow-visible md:overflow-hidden shrink-0 md:shrink">
+          < div className="flex-grow flex flex-col min-h-[500px] md:min-h-0 bg-zinc-950/40 backdrop-blur-md border border-white/5 rounded-2xl overflow-visible md:overflow-hidden shrink-0 md:shrink" >
             <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-white/5 flex flex-col sm:flex-row items-start sm:items-center justify-between bg-black/40 gap-2">
               <div className="flex items-center gap-3">
                 <span className="text-[10px] font-black text-purple-400 uppercase tracking-[0.4em]">TRANSMISSION LOG</span>
@@ -643,37 +661,37 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
                 </div>
               ) : (
                 filteredSongs.map(song => (
-                  <div key={song.id} className="py-2.5 flex items-center justify-between group hover:bg-white/[0.02] -mx-4 px-4 transition-all">
-                    <div className="min-w-0 flex-grow flex items-center gap-4">
+                  <div key={song.id} className="py-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between group hover:bg-white/[0.02] -mx-4 px-4 transition-all gap-2 sm:gap-4">
+                    <div className="w-full sm:w-auto min-w-0 flex-grow flex items-center gap-4">
                       <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-white/5 flex-shrink-0 overflow-hidden">
                         <img src={song.cover_art_url || `https://picsum.photos/seed/${song.id}/100`} className="w-full h-full object-cover grayscale opacity-50 group-hover:grayscale-0 group-hover:opacity-100 transition-all" alt="" />
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-[10px] font-black text-white/50 group-hover:text-white truncate uppercase transition-colors">{song.title}</h4>
+                      <div className="flex-grow min-w-0 overflow-hidden">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="text-[10px] font-black text-white/50 group-hover:text-white truncate uppercase transition-colors max-w-full">{song.title}</h4>
                           {(song.status === 'in_box' || song.status === 'pool') && (song.upvotes > 0 || song.status === 'in_box') && (
                             <span className={`text-[7px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter shrink-0 flex items-center gap-1 ${song.status === 'in_box' ? 'bg-purple-500/20 text-purple-400' : 'bg-zinc-800 text-zinc-400'}`}>
                               🗳️ {song.upvotes || 0} Votes
                             </span>
                           )}
                           {song.status === 'now_playing' && (
-                            <span className="text-[7px] font-black bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded uppercase tracking-tighter">📡 Active</span>
+                            <span className="text-[7px] font-black bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded uppercase tracking-tighter shrink-0">📡 Active</span>
                           )}
                         </div>
-                        <span className="text-[8px] font-bold text-zinc-700 uppercase tracking-tight group-hover:text-purple-400/50 transition-colors">{song.artist_name}</span>
+                        <span className="text-[8px] font-bold text-zinc-700 uppercase tracking-tight group-hover:text-purple-400/50 transition-colors truncate block max-w-full">{song.artist_name}</span>
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-1 sm:gap-2 flex-shrink-0">
+                    <div className="flex flex-wrap gap-1 md:gap-2 flex-shrink-0 w-full sm:w-auto pl-12 sm:pl-0">
                       <button
                         onClick={() => handleVote(song.id, song.upvotes)}
                         disabled={voteCooldowns[song.id] || song.status === 'now_playing'}
-                        className={`text-[7px] font-black border px-2 py-1 rounded transition-all uppercase ${voteCooldowns[song.id] ? 'border-zinc-800 text-zinc-600 cursor-not-allowed' : 'border-purple-500/30 text-purple-400 hover:text-white hover:bg-purple-500/20'}`}
+                        className={`text-[7px] font-black border px-3 py-1.5 sm:px-2 sm:py-1 rounded transition-all uppercase flex-grow sm:flex-none text-center ${voteCooldowns[song.id] ? 'border-zinc-800 text-zinc-600 cursor-not-allowed' : 'border-purple-500/30 text-purple-400 hover:text-white hover:bg-purple-500/20'}`}
                       >
                         VOTE
                       </button>
                       <button
                         onClick={() => context.downloadSong(PersistentRadioService.mapDbToApp(song))}
-                        className="text-[7px] font-black border border-white/5 px-2 py-1 rounded text-zinc-600 hover:text-white hover:bg-white/5 transition-all uppercase"
+                        className="text-[7px] font-black border border-white/5 px-3 py-1.5 sm:px-2 sm:py-1 rounded text-zinc-600 hover:text-white hover:bg-white/5 transition-all uppercase flex-grow sm:flex-none text-center"
                       >
                         DL
                       </button>
@@ -681,15 +699,15 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
                         <>
                           <button
                             onClick={() => pushToNow(song)}
-                            className="text-[7px] font-black border border-purple-500/20 px-2 py-1 rounded text-purple-400 hover:text-white hover:bg-purple-600 transition-all uppercase"
+                            className="text-[7px] font-black border border-purple-500/20 px-3 py-1.5 sm:px-2 sm:py-1 rounded text-purple-400 hover:text-white hover:bg-purple-600 transition-all uppercase flex-grow sm:flex-none text-center"
                           >
                             {song.status === 'now_playing' ? 'Restart' : 'Play'}
                           </button>
                           <button
                             onClick={() => pushToBox(song.id, song.status === 'in_box' ? 'pool' : 'in_box')}
-                            className={`text-[7px] font-black border px-2 py-1 rounded uppercase transition-all ${song.status === 'in_box' ? 'border-purple-500/50 text-purple-400 bg-purple-500/10' : 'border-white/10 text-zinc-500 hover:text-white hover:border-white/30'}`}
+                            className={`text-[7px] font-black border px-3 py-1.5 sm:px-2 sm:py-1 rounded uppercase transition-all flex-grow sm:flex-none text-center ${song.status === 'in_box' ? 'border-purple-500/50 text-purple-400 bg-purple-500/10' : 'border-white/10 text-zinc-500 hover:text-white hover:border-white/30'}`}
                           >
-                            {song.status === 'in_box' ? 'Withdraw' : 'Box'}
+                            {song.status === 'in_box' ? 'Boxed' : 'Box'}
                           </button>
                         </>
                       )}
@@ -698,10 +716,10 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
                 ))
               )}
             </div>
-          </div>
+          </div >
 
           {/* TRANSMITTER PAD (High Density) */}
-          <div className="md:h-44 bg-zinc-950/80 border border-white/10 rounded-2xl p-4 flex flex-col md:flex-row gap-4 mb-4 md:mb-0">
+          < div className="md:h-44 bg-zinc-950/80 border border-white/10 rounded-2xl p-4 flex flex-col md:flex-row gap-4 mb-4 md:mb-0" >
             <div className="w-full md:w-48 bg-black/40 rounded-xl border border-white/5 p-3 flex flex-col justify-between hidden md:flex">
               <div className="flex justify-between items-center mb-1">
                 <span className="text-[7px] font-black text-zinc-700 uppercase">Return Feed</span>
@@ -741,11 +759,11 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
                 {isSending ? 'Sending...' : 'Transmit Payload'}
               </button>
             </div>
-          </div>
-        </div>
+          </div >
+        </div >
 
         {/* RIGHT DECK: ARCHIVE & PULSE SIDEBAR */}
-        <div className="w-full md:w-80 border-t md:border-t-0 md:border-l border-white/5 bg-zinc-950/40 backdrop-blur-md flex flex-col shrink-0 md:overflow-hidden h-[500px] md:h-auto">
+        < div className="w-full md:w-80 border-t md:border-t-0 md:border-l border-white/5 bg-zinc-950/40 backdrop-blur-md flex flex-col shrink-0 md:overflow-hidden h-[500px] md:h-auto" >
           <div className="flex-grow min-h-0">
             <TheChat profile={profile} />
           </div>
@@ -788,12 +806,12 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
               </div>
             )}
           </div>
-        </div>
+        </div >
 
-      </div>
+      </div >
 
       {/* 4. DENSE GRID OVERLAY SIDES */}
-      <div className="absolute inset-0 z-40 border-[20px] border-white/0 pointer-events-none border-l-white/[0.01] border-r-white/[0.01]" />
-    </div>
+      < div className="absolute inset-0 z-40 border-[20px] border-white/0 pointer-events-none border-l-white/[0.01] border-r-white/[0.01]" />
+    </div >
   );
 };

@@ -12,6 +12,7 @@ import { AudioVisualizer } from "./components/AudioVisualizer";
 import { SiteEffects } from "./components/SiteEffects";
 import { Ticker } from "./components/Ticker";
 import { TuneInOverlay } from "./components/TuneInOverlay";
+import { PresenceAlerts } from "./components/PresenceAlerts";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { RadioProvider } from "./contexts/AudioPlayerContext";
 import { supabase } from "./services/supabaseClient";
@@ -23,6 +24,8 @@ const App: React.FC = () => {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentView, setCurrentView] = useState<View>("club");
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [updateSWFn, setUpdateSWFn] = useState<((reloadPage?: boolean) => Promise<void>) | null>(null);
 
   useEffect(() => {
     const fetchProfile = async (userId: string) => {
@@ -71,8 +74,27 @@ const App: React.FC = () => {
       }
     });
 
-    return () => subscription.unsubscribe();
+    // PWA Update Listener
+    const handleUpdateAvailable = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail?.updateSW) {
+        setUpdateAvailable(true);
+        setUpdateSWFn(() => customEvent.detail.updateSW);
+      }
+    };
+    window.addEventListener('pwa-update-available', handleUpdateAvailable);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('pwa-update-available', handleUpdateAvailable);
+    };
   }, []);
+
+  const handleUpdateApp = () => {
+    if (updateSWFn) {
+      updateSWFn(true); // Triggers the SW update and reloads the page
+    }
+  };
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -118,6 +140,30 @@ const App: React.FC = () => {
         <AudioVisualizer />
         <SiteEffects />
         <TuneInOverlay />
+
+        {/* PWA Update Prompt */}
+        {updateAvailable && (
+          <div className="fixed top-0 left-0 right-0 z-[9999] p-4 flex justify-center pointer-events-none animate-fade-in-down">
+            <div className="bg-zinc-900 border border-purple-500/50 shadow-[0_0_30px_rgba(168,85,247,0.3)] rounded-2xl p-4 flex items-center gap-4 pointer-events-auto max-w-sm w-full">
+              <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </div>
+              <div className="flex-grow">
+                <h3 className="text-white text-[12px] font-black uppercase tracking-wider mb-0.5">Club Update Ready</h3>
+                <p className="text-zinc-400 text-[10px] font-medium leading-tight">A new version of Youniverse is available. Update now to fix issues and load fresh code.</p>
+              </div>
+              <button
+                onClick={handleUpdateApp}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-colors shrink-0"
+              >
+                Reload
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="h-[100dvh] relative z-10 flex flex-col overflow-y-auto overflow-x-hidden text-white w-full">
           <main className="flex-grow flex flex-col relative w-full">
             {currentView === "club" ? (
@@ -132,6 +178,8 @@ const App: React.FC = () => {
             <Ticker />
           </div>
         </div>
+
+        <PresenceAlerts profile={profile} />
         <Analytics />
       </RadioProvider>
     </ThemeProvider>

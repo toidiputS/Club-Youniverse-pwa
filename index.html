@@ -12,7 +12,28 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Youniverse" />
   <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+
+  <!-- Primary Meta Tags -->
   <title>Club Youniverse Live</title>
+  <meta name="title" content="Club Youniverse Live" />
+  <meta name="description"
+    content="A real-time, 24/7 collaborative radio experience. Vote on what plays next, interact with the crowd, and share tracks with the YOUniverse." />
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://clubyouniverse.live/" />
+  <meta property="og:title" content="Club Youniverse Live" />
+  <meta property="og:description"
+    content="A real-time, 24/7 collaborative radio experience. Vote on what plays next, interact with the crowd, and share tracks with the YOUniverse." />
+  <meta property="og:image" content="https://clubyouniverse.live/icons/icon-512.png" />
+
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image" />
+  <meta property="twitter:url" content="https://clubyouniverse.live/" />
+  <meta property="twitter:title" content="Club Youniverse Live" />
+  <meta property="twitter:description"
+    content="A real-time, 24/7 collaborative radio experience. Vote on what plays next, interact with the crowd, and share tracks with the YOUniverse." />
+  <meta property="twitter:image" content="https://clubyouniverse.live/icons/icon-512.png" />
   <!-- Tailwind CSS for styling -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -34,6 +55,7 @@
             "fade-out-up": "fadeOutUp 1.2s ease-out forwards",
             "glitch-snap": "glitchSnap 0.3s linear forwards",
             "scanline-wipe": "scanlineWipe 0.4s linear forwards",
+            "slide-in-up": "slideInUp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards",
           },
           keyframes: {
             pulse: {
@@ -78,6 +100,10 @@
               "0%": { top: "-20%", opacity: "0" },
               "10%": { opacity: "1" },
               "100%": { top: "120%", opacity: "0" },
+            },
+            slideInUp: {
+              "0%": { transform: "translateY(20px)", opacity: "0" },
+              "100%": { transform: "translateY(0)", opacity: "1" },
             },
           },
         },

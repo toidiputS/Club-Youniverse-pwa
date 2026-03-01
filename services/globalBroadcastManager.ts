@@ -58,6 +58,11 @@ export class GlobalBroadcastManager {
       existingAudio.load();
     }
 
+    // Clean up leaked intervals from previous HMR sessions to prevent duplicate Conductor skips
+    if ((globalThis as any).__CLUB_YOUNIVERSE_HEARTBEAT__) clearInterval((globalThis as any).__CLUB_YOUNIVERSE_HEARTBEAT__);
+    if ((globalThis as any).__CLUB_YOUNIVERSE_CONDUCTOR__) clearInterval((globalThis as any).__CLUB_YOUNIVERSE_CONDUCTOR__);
+    if ((globalThis as any).__CLUB_YOUNIVERSE_TIME_UPDATE__) clearInterval((globalThis as any).__CLUB_YOUNIVERSE_TIME_UPDATE__);
+
     // Create the audio element
     this.audioElement = new Audio();
     this.audioElement.preload = "auto";
@@ -128,6 +133,8 @@ export class GlobalBroadcastManager {
       await this.tryClaimLeadership();
     }, 2000);
 
+    (globalThis as any).__CLUB_YOUNIVERSE_HEARTBEAT__ = this.heartbeatInterval;
+
     // Run immediately
     this.tryClaimLeadership();
   }
@@ -136,12 +143,13 @@ export class GlobalBroadcastManager {
     return this.state.leaderId;
   }
 
-  public async claimLeadership() {
+  public async claimLeadership(force: boolean = false, previousLeaderId: string | null = null) {
     if (!this.userId) return false;
     this.releasedAt = 0; // Clear any release cooldown
     const now = new Date();
-    // Force-claim: No filter — manual Take Deck always wins
-    const { error } = await supabase
+
+    // Atomic update: If not forcing, we only update if the leader is still who we thought it was
+    let query = supabase
       .from("broadcasts")
       .update({
         leader_id: this.userId,
@@ -149,16 +157,30 @@ export class GlobalBroadcastManager {
       })
       .eq("id", "00000000-0000-0000-0000-000000000000");
 
-    if (!error) {
-      console.log("👑 Leadership claimed manually (force)");
+    if (!force && previousLeaderId !== undefined) {
+      if (previousLeaderId === null) {
+        query = query.is("leader_id", null);
+      } else {
+        query = query.eq("leader_id", previousLeaderId);
+      }
+    }
+
+    const { error, data } = await query.select();
+
+    // If data is empty, it means the condition failed (someone else won the race)
+    if (!error && data && data.length > 0) {
+      console.log("👑 Leadership claimed successfully.");
       this.isLeaderLocal = true;
       this.state.leaderId = this.userId;
       this.emit("leaderIdChanged", this.userId);
       this.emit("leaderChanged", true);
       this.startConductorLoop();
       await this.fetchAndSync();
+      return true;
+    } else {
+      console.log("📉 Leadership claim failed (race condition lost).");
+      return false;
     }
-    return !error;
   }
 
   public async releaseLeadership() {
@@ -209,7 +231,8 @@ export class GlobalBroadcastManager {
       const releaseCooldown = Date.now() - this.releasedAt < 15000;
       if (isLeaderDead && this.userId && !releaseCooldown) {
         console.log("🔦 Leader is missing or dead. Attempting auto-claim...");
-        await this.claimLeadership();
+        // Auto-claim passes the previousLeaderId to prevent race conditions
+        await this.claimLeadership(false, remoteLeaderId);
         return; // Next interval will pick up the change
       }
 
@@ -260,6 +283,8 @@ export class GlobalBroadcastManager {
         console.error("Conductor error:", e);
       }
     }, 10000); // 10s check
+
+    (globalThis as any).__CLUB_YOUNIVERSE_CONDUCTOR__ = this.conductorInterval;
   }
 
   private stopConductorLoop() {
@@ -557,6 +582,8 @@ export class GlobalBroadcastManager {
         this.emit("timeUpdate", this.audioElement.currentTime);
       }
     }, 1000);
+
+    (globalThis as any).__CLUB_YOUNIVERSE_TIME_UPDATE__ = this.timeUpdateInterval;
   }
 
   // --- PUBLIC API ---

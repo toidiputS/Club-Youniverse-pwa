@@ -29,8 +29,35 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onSignOut, profile }
   if (!context) return null;
   const { nowPlaying, isPlaying } = context;
 
+  const [inviteText, setInviteText] = useState("Invite 🔗");
+
+  const handleInvite = async () => {
+    const shareData = {
+      title: "Club Youniverse Live",
+      text: "Come join the club! Vote on songs, chat with the crowd, and share tracks with the YOUniverse.",
+      url: "https://clubyouniverse.live",
+    };
+
+    if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+      try {
+        await navigator.share(shareData);
+      } catch (err) {
+        console.log("Error sharing", err);
+      }
+    } else {
+      // Fallback: Copy to clipboard
+      try {
+        await navigator.clipboard.writeText("https://clubyouniverse.live");
+        setInviteText("Copied! ✨");
+        setTimeout(() => setInviteText("Invite 🔗"), 2000);
+      } catch (err) {
+        console.error("Failed to copy", err);
+      }
+    }
+  };
+
   return (
-    <header className="relative flex flex-col w-full pointer-events-none p-2 sm:p-4 gap-3 sm:gap-4">
+    <header className="relative flex flex-col w-full pointer-events-none p-4 pb-0 gap-3">
       {/* TOP ROW: Branding (Left) and Profile (Right) */}
       <div className="flex justify-between items-center w-full">
         {/* Branding */}
@@ -53,9 +80,9 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onSignOut, profile }
         </div>
 
         {/* Profile */}
-        <div className="flex items-center gap-2 sm:gap-3 group pointer-events-auto shrink-0 z-50">
-          <div className="flex flex-col items-end">
-            <span className="text-[8px] sm:text-[9px] font-black text-white/40 tracking-wider uppercase group-hover:text-white transition-colors">{profile.name}</span>
+        <div className="flex items-center gap-2 sm:gap-3 group pointer-events-auto shrink-0 z-50 min-w-0">
+          <div className="flex flex-col items-end min-w-0">
+            <span className="text-[8px] sm:text-[9px] font-black text-white/40 tracking-wider uppercase group-hover:text-white transition-colors truncate max-w-[120px] sm:max-w-xs text-right">{profile.name}</span>
             <button
               onClick={onSignOut}
               className="text-[6px] sm:text-[7px] font-black text-red-500/30 uppercase tracking-widest hover:text-red-500 transition-colors"
@@ -95,12 +122,28 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onSignOut, profile }
           </div>
         )}
 
-        <button
-          onClick={() => onNavigate("dj-booth")}
-          className="px-3 sm:px-5 py-1.5 sm:py-2 bg-white text-black rounded-full text-[8px] sm:text-[9px] font-black uppercase tracking-[0.1em] sm:tracking-[0.2em] hover:bg-purple-500 hover:text-white transition-all cursor-pointer shadow-[0_0_20px_rgba(255,255,255,0.2)] hover:shadow-[0_0_20px_rgba(168,85,247,0.4)] whitespace-nowrap shrink-0"
-        >
-          Song Pool ⚡
-        </button>
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => onNavigate("dj-booth")}
+            className="px-3 sm:px-5 py-1.5 sm:py-2 bg-white text-black rounded-full text-[8px] sm:text-[9px] font-black uppercase tracking-[0.1em] sm:tracking-[0.2em] hover:bg-purple-500 hover:text-white transition-all cursor-pointer shadow-[0_0_20px_rgba(255,255,255,0.2)] hover:shadow-[0_0_20px_rgba(168,85,247,0.4)] whitespace-nowrap"
+          >
+            Song Pool ⚡
+          </button>
+
+          <button
+            onClick={handleInvite}
+            className="relative px-3 sm:px-5 py-1.5 sm:py-2 bg-gradient-to-r from-purple-600 via-fuchsia-500 to-pink-600 text-white rounded-full text-[8px] sm:text-[9px] font-black uppercase tracking-[0.1em] sm:tracking-[0.2em] transition-all cursor-pointer border border-white/20 whitespace-nowrap overflow-hidden group shadow-[0_0_15px_rgba(217,70,239,0.5)] hover:shadow-[0_0_25px_rgba(217,70,239,0.8)] hover:scale-105"
+            style={{ minWidth: '80px' }}
+          >
+            {/* Animated shimmer sweep */}
+            <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent group-hover:animate-[shimmer_1.5s_infinite]" />
+            <span className="relative z-10 flex items-center justify-center gap-1.5 mix-blend-overlay">
+              {inviteText}
+              {inviteText === "Invite 🔗" && <span className="animate-pulse">✨</span>}
+            </span>
+          </button>
+        </div>
 
         {/* VOLUME CONTROLS (Hidden on small mobile) */}
         <div className="hidden sm:flex items-center gap-3 px-3 py-1 bg-white/5 rounded-full border border-white/5 hover:border-white/10 transition-all flex-grow max-w-[200px]">

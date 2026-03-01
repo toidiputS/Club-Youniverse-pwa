@@ -11,6 +11,13 @@ export class LocalAiService {
      * Generate a quick DJ banter line based on the transition.
      */
     static async generateDJSpeech(winner: Song, losers: Song[]): Promise<string> {
+        // Prevent external clients (phones, internet users) from getting PNA (Private Network Access) browser prompts
+        const isLocalHost = ['localhost', '127.0.0.1', '172.20.20.20'].includes(window.location.hostname);
+        if (!isLocalHost) {
+            console.log("🤖 Skipping Local AI (Running on remote client)");
+            return `The crowd has spoken! Up next: ${winner.title} by ${winner.artistName}.`;
+        }
+
         const prompt = `You are a high-energy, slightly edgy AI DJ for "Club Youniverse". 
         The song "${winner.title}" by ${winner.artistName} just won the vote.
         It beat out ${losers.map(l => `"${l.title}"`).join(", ")}.
@@ -53,6 +60,11 @@ export class LocalAiService {
      * Generate a short roast for the chat.
      */
     static async generateRoast(song: Song): Promise<string> {
+        const isLocalHost = ['localhost', '127.0.0.1', '172.20.20.20'].includes(window.location.hostname);
+        if (!isLocalHost) {
+            return "This track is hitting different right now.";
+        }
+
         try {
             const response = await fetch(LM_STUDIO_URL, {
                 method: "POST",

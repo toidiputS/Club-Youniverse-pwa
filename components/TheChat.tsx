@@ -81,7 +81,8 @@ export const TheChat: React.FC<TheChatProps> = ({ profile }) => {
             {/* Chat Messages */}
             <div
                 ref={scrollRef}
-                className="flex-grow overflow-y-auto p-4 space-y-2 scrollbar-hide min-h-0"
+                className="flex-grow overflow-y-auto pt-2 pb-4 px-3 space-y-2 scrollbar-hide min-h-0"
+                style={{ maskImage: 'linear-gradient(to bottom, transparent, black 20px)', WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 20px)' }}
             >
                 {chatMessages.map((msg) => {
                     const isMention = msg.text.toLowerCase().includes("@dj");
