@@ -26,6 +26,7 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [visualFile, setVisualFile] = useState<File | null>(null);
 
   // Voting State
   const [voteCooldowns, setVoteCooldowns] = useState<Record<string, boolean>>({});
@@ -325,9 +326,40 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
         .upload(filePath, file, { cacheControl: '3600', upsert: true });
 
       if (uploadError) throw uploadError;
-      setUploadProgress(70);
+      setUploadProgress(50);
 
       const { data: { publicUrl } } = supabase.storage.from('songs').getPublicUrl(filePath);
+
+      let canvasUrl = undefined;
+      let isCanvas = false;
+
+      if (visualFile) {
+        // Check filesize (max 15MB)
+        if (visualFile.size > 15 * 1024 * 1024) {
+          alert("Canvas is too large! Maximum size is 15MB.");
+        } else {
+          setUploadProgress(75);
+          const visExt = visualFile.name.split('.').pop();
+          const visCleanName = visualFile.name.replace(`.${visExt}`, "").replace(/[^a-zA-Z0-9]/g, "_");
+          const visFileName = `v_${Date.now()}_${visCleanName}.${visExt}`;
+          const visPath = `${profile.user_id}/${visFileName}`;
+
+          const isMp4 = visualFile.type.includes('mp4');
+          const bucketName = isMp4 ? 'videos' : 'covers';
+          isCanvas = isMp4;
+
+          const { error: visError } = await supabase.storage
+            .from(bucketName)
+            .upload(visPath, visualFile, { cacheControl: '3600', upsert: true });
+
+          if (!visError) {
+            const { data: { publicUrl: vUrl } } = supabase.storage.from(bucketName).getPublicUrl(visPath);
+            canvasUrl = vUrl;
+          } else {
+            console.error("Visual upload failed:", visError);
+          }
+        }
+      }
 
       await supabase.from('songs').insert({
         uploader_id: profile.user_id,
@@ -336,7 +368,9 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
         source: "upload",
         audio_url: publicUrl,
         duration_sec: duration,
-        status: canControl ? "pool" : "review" // DJ goes to pool, Youser goes to review
+        status: canControl ? "pool" : "review",
+        cover_art_url: canvasUrl,
+        is_canvas: isCanvas
       });
 
       setUploadProgress(100);
@@ -347,7 +381,7 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
     } catch (error: any) {
       console.error(error);
     } finally {
-      setTimeout(() => { setIsUploading(false); setUploadProgress(0); }, 1000);
+      setTimeout(() => { setIsUploading(false); setUploadProgress(0); setVisualFile(null); }, 1000);
     }
   };
 
@@ -493,9 +527,23 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
                 <input type="checkbox" checked={isSunoConfirmed} onChange={e => setIsSunoConfirmed(e.target.checked)} className="w-3 h-3 bg-black rounded border-white/10 text-purple-600 focus:ring-0" />
                 <span className="text-[8px] font-black uppercase tracking-tighter">Monetization Sync</span>
               </label>
-              <label className={`block py-3 text-center border-2 border-dashed rounded-lg transition-all ${isSunoConfirmed ? 'border-purple-500/40 cursor-pointer hover:bg-purple-500/5' : 'border-white/5 opacity-50 select-none'}`}>
-                <input type="file" accept="audio/*" onChange={handleUpload} className="hidden" disabled={!isSunoConfirmed} />
-                <span className="text-[9px] font-black uppercase tracking-widest">{isUploading ? `Syncing ${uploadProgress}%` : 'Deploy Node'}</span>
+
+              <div className={`mb-3 transition-opacity ${isSunoConfirmed ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}>
+                <label className="flex items-center justify-between cursor-pointer group">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-zinc-400 group-hover:text-purple-400 transition-colors">Attach Canvas (IMG/MP4)</span>
+                  <div className="w-5 h-5 rounded bg-white/5 flex items-center justify-center text-[10px] text-zinc-500 group-hover:bg-purple-500/20 group-hover:text-purple-400 transition-colors">+</div>
+                  <input type="file" accept="image/*,video/mp4" onChange={e => setVisualFile(e.target.files?.[0] || null)} className="hidden" disabled={!isSunoConfirmed} />
+                </label>
+                {visualFile && (
+                  <div className="mt-2 text-[8px] text-green-400 bg-green-500/10 px-2 py-1 rounded border border-green-500/20 truncate">
+                    {visualFile.name}
+                  </div>
+                )}
+              </div>
+
+              <label className={`block py-3 text-center border-2 border-dashed rounded-lg transition-all ${isSunoConfirmed ? 'border-purple-500/40 cursor-pointer hover:bg-purple-500/10 shadow-[inset_0_0_20px_rgba(168,85,247,0.05)]' : 'border-white/5 opacity-50 select-none'}`}>
+                <input type="file" accept="audio/*" onChange={handleUpload} className="hidden" disabled={!isSunoConfirmed || isUploading} />
+                <span className="text-[9px] font-black uppercase tracking-widest">{isUploading ? `Syncing ${uploadProgress}%` : 'Deploy Node Audio'}</span>
               </label>
             </div>
           </div>

@@ -45,6 +45,7 @@ export interface Song {
   boxAppearanceCount: number;
   status: "pool" | "in_box" | "next_play" | "now_playing" | "graveyard" | "debut";
   coverArtUrl?: string;
+  is_canvas?: boolean;
   lyrics?: string;
   playCount: number;
   upvotes: number;

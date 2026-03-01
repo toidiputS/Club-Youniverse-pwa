@@ -24,8 +24,25 @@ export const Radio: React.FC<RadioProps> = ({ onNavigate, onSignOut, profile }) 
       </div>
 
       {/* 2. CENTER: THE FLOOR (Open Space for Visuals) */}
-      <div className="flex-grow flex items-center justify-center p-4">
-        <div className="absolute inset-x-0 bottom-0 h-[40vh] bg-gradient-to-t from-black/80 to-transparent pointer-events-none z-10" />
+      <div className="absolute inset-0 flex items-center justify-center -z-10 bg-black overflow-hidden">
+        <div className="absolute inset-x-0 bottom-0 h-[50vh] bg-gradient-to-t from-black via-black/80 to-transparent pointer-events-none z-10" />
+
+        {context.nowPlaying?.coverArtUrl ? (
+          context.nowPlaying.is_canvas ? (
+            <video
+              src={context.nowPlaying.coverArtUrl}
+              autoPlay loop muted playsInline
+              className="absolute inset-0 w-full h-full object-cover opacity-70 animate-in fade-in duration-1000"
+            />
+          ) : (
+            <>
+              <img src={context.nowPlaying.coverArtUrl} className="absolute inset-0 w-full h-full object-cover opacity-30 blur-3xl scale-125" alt="" />
+              <img src={context.nowPlaying.coverArtUrl} className="z-20 w-3/4 max-w-md aspect-square object-cover shadow-[0_0_50px_rgba(0,0,0,0.8)] rounded-xl border border-white/10 animate-in zoom-in-95 fade-in duration-1000" alt="Album Cover" />
+            </>
+          )
+        ) : (
+          <div className="absolute inset-0 bg-zinc-950 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-purple-900/20 via-black to-black opacity-50 pulse" />
+        )}
       </div>
 
       {/* 3. SIDE COLUMN: Chat & Voting Stack (Mobile First layout) */}

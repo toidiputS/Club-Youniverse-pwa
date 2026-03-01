@@ -20,6 +20,7 @@ type DbSong = {
   box_appearance_count: number;
   status: "pool" | "in_box" | "now_playing" | "graveyard" | "debut";
   cover_art_url?: string;
+  is_canvas?: boolean;
   lyrics?: string;
   play_count: number;
   upvotes: number;
@@ -49,6 +50,7 @@ const mapDbSongToAppSong = (dbSong: DbSong): Song => {
     source: dbSong.source,
     audioUrl: audioUrl,
     coverArtUrl: dbSong.cover_art_url,
+    is_canvas: dbSong.is_canvas,
     durationSec: dbSong.duration_sec,
     stars: dbSong.stars,
     boxRoundsSeen: dbSong.box_rounds_seen,
@@ -125,6 +127,7 @@ export const addSongToDatabase = async (
     box_appearance_count: songData.boxAppearanceCount,
     status: songData.status,
     cover_art_url: songData.coverArtUrl,
+    is_canvas: songData.is_canvas,
     lyrics: songData.lyrics,
     play_count: songData.playCount,
     upvotes: songData.upvotes,
