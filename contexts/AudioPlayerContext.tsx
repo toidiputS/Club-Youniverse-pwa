@@ -31,6 +31,7 @@ interface RadioContextType {
   chatMessages: ChatMessage[];
   profile: Profile | null;
   tickerText: string;
+  djBanter: string;
 
   // Actions
   setVolume: (vol: number) => void;
@@ -39,6 +40,7 @@ interface RadioContextType {
   addChatMessage: (msg: ChatMessage) => void;
   setProfile: React.Dispatch<React.SetStateAction<Profile | null>>;
   setTickerText: (text: string) => void;
+  setDjBanter: (text: string) => void;
 
   // Admin/System Actions (Leader only)
   setRadioState: (state: RadioState) => void;
@@ -69,6 +71,7 @@ export const RadioProvider: React.FC<{
   const [isMuted, setIsMutedState] = useState(broadcastManager.isMuted());
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [tickerText, setTickerText] = useState("Welcome to Club Youniverse. Vote in The Box to help shape the station.");
+  const [djBanter, setDjBanter] = useState("DJ Python is loading up the decks... Please stand by.");
   const [leaderId, setLeaderId] = useState<string | null>(broadcastManager.getLeaderId());
 
   const togglePlay = useCallback(() => {
@@ -150,6 +153,7 @@ export const RadioProvider: React.FC<{
     chatMessages,
     profile,
     tickerText,
+    djBanter,
     setVolume,
     setMuted,
     togglePlay,
@@ -164,6 +168,7 @@ export const RadioProvider: React.FC<{
       document.body.removeChild(link);
     },
     setTickerText,
+    setDjBanter,
     setRadioState,
     setNowPlaying,
     setNextSong,
@@ -172,8 +177,8 @@ export const RadioProvider: React.FC<{
     releaseLeadership: () => broadcastManager.releaseLeadership(),
   }), [
     nowPlaying, nextSong, radioState, isLeader, isPlaying,
-    currentTime, volume, isMuted, chatMessages, profile, tickerText,
-    setVolume, setMuted, togglePlay, addChatMessage, setProfile,
+    currentTime, volume, isMuted, chatMessages, profile, tickerText, djBanter,
+    setVolume, setMuted, togglePlay, addChatMessage, setProfile, setTickerText, setDjBanter,
     setTickerText, setRadioState, setNowPlaying, setNextSong, leaderId
   ]);
 

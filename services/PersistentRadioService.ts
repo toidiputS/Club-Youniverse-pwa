@@ -259,16 +259,26 @@ export class PersistentRadioService {
             let nextStatus = "pool";
             let isDsw = currSong.is_dsw;
 
+            if (currSong.live_stars_count > 0) {
+                // If it's DSW, its base stars are 0, meaning any vote helps. But a song starts its rating scale at 1, technically.
+                // Actually the math `sum - count * stars` works beautifully: 
+                // A DSW has 0 stars. If it gets a 5 star vote, delta = 5 - (1 * 0) = +5. New Stars = 5! A pardon!
+                const delta = Math.round(currSong.live_stars_sum - (currSong.live_stars_count * currSong.stars));
+                newStars = Math.min(10, Math.max(0, currSong.stars + delta));
+                console.log(`⭐ Live Rating Math for ${currSong.title}: Old Stars: ${currSong.stars}, Delta: ${delta}, New Stars: ${newStars}`);
+            }
+
             if (currSong.is_dsw) {
-                // It was a Dead Song Walking. This was its farewell play.
-                console.log(`🪦 Farewell, ${currSong.title}. Sending to Graveyard.`);
-                nextStatus = "graveyard";
-            } else {
-                if (currSong.live_stars_count > 0) {
-                    const delta = Math.round(currSong.live_stars_sum - (currSong.live_stars_count * currSong.stars));
-                    newStars = Math.min(10, Math.max(0, currSong.stars + delta));
-                    console.log(`⭐ Live Rating Math for ${currSong.title}: Old Stars: ${currSong.stars}, Delta: ${delta}, New Stars: ${newStars}`);
+                // It was a Dead Song Walking. Did it get pardoned?
+                if (newStars > 0) {
+                    console.log(`🕊️ THE PARDON! ${currSong.title} survived its farewell play with ${newStars} stars!`);
+                    isDsw = false;
+                    nextStatus = "pool";
+                } else {
+                    console.log(`🪦 Farewell, ${currSong.title}. Sending to Graveyard.`);
+                    nextStatus = "graveyard";
                 }
+            } else {
                 if (newStars <= 0) {
                     isDsw = true;
                     newStars = 0; // Lock at 0
