@@ -269,6 +269,13 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
     await fetchLibrary();
   };
 
+  const handleDelete = async (songId: string) => {
+    if (!isAdmin) return;
+    if (!window.confirm("Are you sure you want to permanently delete this node from the database?")) return;
+    await supabase.from("songs").delete().eq("id", songId);
+    await fetchLibrary();
+  };
+
   const handleTtsSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canControl || !ttsInput.trim() || isSending) return;
@@ -711,8 +718,12 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
                 filteredSongs.map(song => (
                   <div key={song.id} className="py-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between group hover:bg-white/[0.02] -mx-4 px-4 transition-all gap-2 sm:gap-4">
                     <div className="w-full sm:w-auto min-w-0 flex-grow flex items-center gap-4">
-                      <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-white/5 flex-shrink-0 overflow-hidden">
-                        <img src={song.cover_art_url || `https://picsum.photos/seed/${song.id}/100`} className="w-full h-full object-cover grayscale opacity-50 group-hover:grayscale-0 group-hover:opacity-100 transition-all" alt="" />
+                      <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-white/5 flex-shrink-0 overflow-hidden relative">
+                        {song.is_canvas && song.cover_art_url ? (
+                          <video src={song.cover_art_url} muted loop playsInline autoPlay className="w-full h-full object-cover grayscale opacity-50 group-hover:grayscale-0 group-hover:opacity-100 transition-all pointer-events-none" />
+                        ) : (
+                          <img src={song.cover_art_url || `https://picsum.photos/seed/${song.id}/100`} className="w-full h-full object-cover grayscale opacity-50 group-hover:grayscale-0 group-hover:opacity-100 transition-all" alt="" />
+                        )}
                       </div>
                       <div className="flex-grow min-w-0 overflow-hidden">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -745,6 +756,14 @@ export const DjBooth: React.FC<DjBoothProps> = ({ onNavigate }) => {
                       </button>
                       {canControl && (
                         <>
+                          {isAdmin && (
+                            <button
+                              onClick={() => handleDelete(song.id)}
+                              className="text-[7px] font-black border border-red-500/20 px-3 py-1.5 sm:px-2 sm:py-1 rounded text-red-500 hover:text-white hover:bg-red-600 transition-all uppercase flex-grow sm:flex-none text-center"
+                            >
+                              DEL
+                            </button>
+                          )}
                           <button
                             onClick={() => pushToNow(song)}
                             className="text-[7px] font-black border border-purple-500/20 px-3 py-1.5 sm:px-2 sm:py-1 rounded text-purple-400 hover:text-white hover:bg-purple-600 transition-all uppercase flex-grow sm:flex-none text-center"
